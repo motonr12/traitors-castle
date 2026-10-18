@@ -234,6 +234,11 @@ html.screen-mode,body.screen-mode{height:100%}
 .fire-player .plaque{width:100%;margin-top:8px;font-size:1rem}
 .fire-player .role-tag{margin-top:6px}
 .fire-choices .big-btn{min-width:min(240px,80vw)}
+.fire-player.just-revealed .role-tag{animation:fadein 1.2s ease-in both}
+.fire-player.just-revealed .stage-portrait{animation:fadein 1.6s ease-in both}
+.fire-row.winners .fire-player{animation:fadein 2.4s ease-in both}
+.final-headline{animation:fadein 2s ease-in both}
+@media (prefers-reduced-motion:reduce){.fire-player.just-revealed .role-tag,.fire-player.just-revealed .stage-portrait,.fire-row.winners .fire-player,.final-headline{animation:none}}
 .final-traitor{color:#f0b8b2}
 .final-faithful{color:var(--brass)}
 .screen-mode .fire-row{flex-wrap:nowrap}
@@ -1034,7 +1039,7 @@ $("resetYes").addEventListener("click", async ()=> {
 /* ---------- revealed roles and fellow traitors ---------- */
 function revealedRole(id){
   const fp = fireState();
-  if (fp && fp.phase === "finale" && fp.roles && fp.roles[id]) return fp.roles[id];
+  if (fp && fp.phase === "finale" && fp.roles && fp.roles[id] && finaleProgress(fp).winner) return fp.roles[id];
   if (isTrial()) return trialStatus[id] && !(trialGame.hidden || {})[id] ? (trialGame.roles[id] || null) : null;
   return statuses[id] ? (statusRoles[id] || null) : null;
 }
@@ -1053,6 +1058,7 @@ function allyLine(){
 // Flow: open (30s, players pick on phones) -> reveal (screen prompts each voter in turn;
 // they tap "Reveal vote" on their phone; the vote shows for 5s) -> done (verdict, role) -> closed.
 // The host's page drives every transition; votes stay private until each is revealed.
+const DAGGER_EXTRA_MS = 5000;
 const VOTE_MS = 30000, SHOW_MS = 5000, GRACE_MS = 1500, ROLE_DELAY_MS = 2500, TRIAL_AUTO_MS = 1800;
 let trialVotes = {}, trialRevealReq = false, pickTarget = null, pickRound = null, stageKey = "", automating = false, myVoteSaving = false;
 
@@ -1207,7 +1213,7 @@ async function hostAutomation(){
         const voter = v.order[v.step];
         // A player who didn't vote is announced straight away; otherwise wait for their tap.
         if (!locked[voter] || voterPressedReveal(v, voter)) await showCurrent(v, locked);
-      } else if (now >= v.shownAt + SHOW_MS){
+      } else if (now >= v.shownAt + SHOW_MS + (((v.revealed[v.step] || {}).weight === 2) ? DAGGER_EXTRA_MS : 0)){
         trialRevealReq = false;
         const step = v.step + 1;
         if (step >= v.order.length) await finishVote({ ...v, step });
@@ -2084,7 +2090,9 @@ async function fireFinale(round, living){
   allPlayers().forEach(p => { if (R[p.id]) roles[p.id] = R[p.id]; });
   living.forEach(id => { roles[id] = R[id] || "faithful"; });
   const traitorsLeft = living.filter(id => roles[id] === "traitor");
-  await putFire({ round, phase:"finale", players: living, roles, traitorsLeft, winner: traitorsLeft.length ? "traitors" : "faithful" });
+  // Faithful first, any Traitors last, each group in random order.
+  const order = shuffle(living.filter(id => roles[id] !== "traitor")).concat(shuffle(traitorsLeft.slice()));
+  await putFire({ round, phase:"finale", players: living, roles, traitorsLeft, order, finaleAt: Date.now(), winner: traitorsLeft.length ? "traitors" : "faithful" });
 }
 async function fireToVote(){
   const f = fireState(); if (!f) return;
@@ -2117,6 +2125,22 @@ async function fireAutomation(){
 function firePortrait(id, tagText, tagClass){
   return `<figure class="fire-player">${bigPortrait(id, "fire-portrait")}<figcaption class="plaque">${escapeHtml(nameOf(id))}</figcaption>${tagText ? `<span class="role-tag ${tagClass || ""}">${tagText}</span>` : ""}</figure>`;
 }
+// Each screen times the finale from when it first saw it, so the reveals line up with the room.
+const FINALE_FIRST_MS = 3000, FINALE_STEP_MS = 5000, FINALE_WAIT_MS = 10000;
+const finaleSeen = {};
+function finaleProgress(f){
+  if (!f || f.phase !== "finale") return { shown: 0, done: false, winner: false };
+  const order = f.order || f.players;
+  if (!finaleSeen[f.round]){
+    // A device that opens the page long after the finale skips straight to the result.
+    const full = FINALE_FIRST_MS + (order.length - 1) * FINALE_STEP_MS + FINALE_WAIT_MS;
+    finaleSeen[f.round] = f.finaleAt && Date.now() - f.finaleAt > full + 20000 ? f.finaleAt : Date.now();
+  }
+  const t = Date.now() - finaleSeen[f.round];
+  const shown = t < FINALE_FIRST_MS ? 0 : Math.min(order.length, Math.floor((t - FINALE_FIRST_MS) / FINALE_STEP_MS) + 1);
+  const lastAt = FINALE_FIRST_MS + (order.length - 1) * FINALE_STEP_MS;
+  return { shown, done: shown >= order.length, winner: t >= lastAt + FINALE_WAIT_MS, order };
+}
 function renderFire(force){
   const stage = $("fireStage");
   const host = isHostView(), player = isPlayerView(), screen = isScreenView();
@@ -2128,7 +2152,8 @@ function renderFire(force){
   const mine = myFireChoice();
   const inGame = f.players.includes(myId());
   const choicesLive = host ? fireChoices(f) : {};
-  const key = JSON.stringify([f.round, f.phase, f.decided, f.outcome, host, player, screen, mine, fireSaving, inGame, choicesLive, ownRole()]);
+  const fp = finaleProgress(f);
+  const key = JSON.stringify([f.round, f.phase, f.decided, f.outcome, host, player, screen, mine, fireSaving, inGame, choicesLive, ownRole(), fp.shown, fp.winner]);
   if (key === fireKey && !force) return;
   fireKey = key;
   const kick = `<span class="kicker">The Fire Pit · Round ${f.round}</span>`;
@@ -2167,16 +2192,35 @@ function renderFire(force){
   } else if (f.phase === "finale"){
     const tw = f.winner === "traitors";
     const headline = tw ? "The Traitors win" : "The Faithful win";
+    const winners = tw ? f.traitorsLeft : f.players.filter(id => f.roles[id] !== "traitor");
     const sub = tw
       ? `${f.traitorsLeft.map(id => escapeHtml(nameOf(id))).join(" and ")} ${f.traitorsLeft.length > 1 ? "were Traitors" : "was a Traitor"} all along.`
       : "Every Traitor has been banished. The Faithful share the prize.";
     if (player && !host && !screen){
-      const myTeam = ownRole();
-      const won = myTeam ? ((myTeam === "traitor") === tw) : null;
-      html = `<span class="kicker">The end</span><h3>${headline}</h3><p style="margin:0">${sub}</p>${won === null ? "" : `<div class="verdict ${won ? "role-faithful" : "role-traitor"}">${won ? "You won." : "You lost."}</div>`}`;
+      if (!fp.winner){
+        html = `<span class="kicker">The end</span><h3>The truth is being revealed</h3><p class="muted" style="margin:0">Watch the community screen.</p>`;
+      } else {
+        const myTeam = ownRole();
+        const won = myTeam ? ((myTeam === "traitor") === tw) : null;
+        html = `<span class="kicker">The end</span><h3>${headline}</h3><p style="margin:0">${sub}</p>${won === null ? "" : `<div class="verdict ${won ? "role-faithful" : "role-traitor"}">${won ? "You won." : "You lost."}</div>`}`;
+      }
+    } else if (!fp.winner){
+      // One by one: every remaining portrait, each role turning over in turn.
+      const shownIds = fp.order.slice(0, fp.shown);
+      const latest = shownIds[shownIds.length - 1];
+      const row = fp.order.map(id => {
+        const isShown = shownIds.includes(id);
+        const r = f.roles[id];
+        const html1 = firePortrait(id, isShown ? (r === "traitor" ? "TRAITOR" : "FAITHFUL") : "?", isShown && r === "traitor" ? "traitor" : "");
+        return id === latest ? html1.replace('class="fire-player"', 'class="fire-player just-revealed"') : html1;
+      }).join("");
+      const lede = !fp.shown ? "The final players will now reveal who they really are."
+        : fp.done ? "Every role has been revealed."
+        : `${escapeHtml(nameOf(latest))} is… ${f.roles[latest] === "traitor" ? "a Traitor" : "Faithful"}.`;
+      html = `<span class="kicker">The end</span><h3>The truth is revealed</h3><div class="fire-row">${row}</div><p class="stage-lede">${lede}</p>`;
     } else {
-      html = `<span class="kicker">The end</span><h3 class="${tw ? "final-traitor" : "final-faithful"}">${headline}</h3>
-        <div class="fire-row">${f.players.map(id => firePortrait(id, f.roles[id] === "traitor" ? "TRAITOR" : "FAITHFUL", f.roles[id] === "traitor" ? "traitor" : "")).join("")}</div>
+      html = `<span class="kicker">The end</span><h3 class="final-headline ${tw ? "final-traitor" : "final-faithful"}">${headline}</h3>
+        <div class="fire-row winners">${winners.map(id => firePortrait(id, tw ? "TRAITOR" : "FAITHFUL", tw ? "traitor" : "")).join("")}</div>
         <p class="stage-lede">${sub}</p>${host ? `<p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>` : ""}`;
     }
   }
@@ -2192,7 +2236,12 @@ $("fireStage").addEventListener("click", e => {
   else if (a === "vote") fireToVote();
   else if (a === "finale") fireFinale(f.round, f.players).catch(()=> toast("That didn't save. Try again."));
 });
-setInterval(() => { fireAutomation(); }, 300);
+setInterval(() => {
+  fireAutomation();
+  const f = fireState();
+  if (f && f.phase === "finale" && gameState().started){ const before = finaleProgress(f).winner; renderFire(false); if (before && !finaleTagged[f.round]){ finaleTagged[f.round] = true; renderWall(); } }
+}, 300);
+const finaleTagged = {};
 
 /* ---------- Special murders: the Safety Chain ---------- */
 // game/chain is public: who is safe (in order), who is still unsafe, and whose turn it is.
