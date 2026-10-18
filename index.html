@@ -1,0 +1,2450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>*,*::before,*::after{box-sizing:border-box}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.4 system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>The Traitors Castle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: one castle hall. A candlelit gate, a robing room for your portrait, then the great wall of framed portraits. */
+:root{
+  --stone:#0f1311;        /* hall at night, green-black */
+  --stone-2:#171d1a;      /* raised panel */
+  --oak:#2a2119;          /* frame backing */
+  --brass:#c9a35c;        /* gilt frames, accent */
+  --brass-dim:#8a7142;
+  --parchment:#ece3cf;    /* text */
+  --ash:#9a9a8c;          /* muted text */
+  --blood:#9e2b25;        /* banished / murdered */
+  --font-display:"IM Fell English SC","Cormorant SC",Georgia,serif;
+  --font-body:"Spectral",Georgia,"Times New Roman",serif;
+  color-scheme:dark;
+}
+html,body{min-height:100%}
+body{
+  background:var(--stone);color:var(--parchment);font-family:var(--font-body);font-size:16px;line-height:1.5;
+  background-image:radial-gradient(ellipse 80% 50% at 50% -10%, rgba(201,163,92,.16), transparent 70%);
+  background-attachment:fixed;
+}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px}
+h1,h2,.display{font-family:var(--font-display);font-weight:400;text-wrap:balance;margin:0}
+.crest{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.crest .eyebrow{font-family:var(--font-display);letter-spacing:.32em;font-size:.8rem;color:var(--brass)}
+.crest h1{font-size:clamp(2.4rem,7vw,4.2rem);line-height:1;letter-spacing:.04em}
+.rule{display:flex;align-items:center;gap:12px;color:var(--brass-dim);width:min(320px,80%)}
+.rule::before,.rule::after{content:"";flex:1;height:1px;background:var(--brass-dim)}
+.rule span{font-size:.7rem}
+.muted{color:var(--ash)}
+button,input{font:inherit}
+.btn{appearance:none;border:1px solid var(--brass);background:transparent;color:var(--brass);font-family:var(--font-display);letter-spacing:.14em;font-size:1rem;padding:12px 22px;cursor:pointer;transition:background .2s,color .2s}
+.btn:hover{background:var(--brass);color:var(--stone)}
+.btn.solid{background:var(--brass);color:var(--stone)}
+.btn.solid:hover{background:var(--parchment);border-color:var(--parchment)}
+.btn.small{font-size:.8rem;padding:7px 12px;letter-spacing:.1em}
+.btn.danger{border-color:var(--blood);color:#e9a59f}
+.btn.danger:hover{background:var(--blood);color:var(--parchment)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,input:focus-visible,.link:focus-visible,.photo-drop:focus-within{outline:2px solid var(--parchment);outline-offset:3px}
+.link{background:none;border:0;color:var(--ash);text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:4px}
+.field{display:flex;flex-direction:column;gap:6px;text-align:left}
+.field label{font-family:var(--font-display);letter-spacing:.18em;font-size:.8rem;color:var(--brass)}
+.field input{background:var(--stone-2);border:1px solid var(--brass-dim);color:var(--parchment);padding:12px 14px;border-radius:0;width:100%;min-width:0}
+.code-input{text-align:center;font-family:var(--font-display);font-size:1.6rem;letter-spacing:.3em;text-transform:uppercase}
+.error{color:#e9a59f;min-height:1.5em;margin:0;font-size:.95rem}
+
+/* Gate */
+.gate{display:flex;flex-direction:column;align-items:center;gap:28px;padding-top:6vh}
+.gate form{display:flex;flex-direction:column;gap:14px;width:min(380px,100%)}
+.gate .hint{max-width:42ch;text-align:center;font-style:italic}
+
+/* Robing room (profile) */
+.robe{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:40px;align-items:start;max-width:760px;margin:40px auto 0}
+.robe form{display:flex;flex-direction:column;gap:18px;min-width:0}
+.photo-drop{position:relative;display:block;cursor:pointer}
+.photo-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.photo-drop .note{display:block;text-align:center;margin-top:10px;font-size:.9rem}
+@media (max-width:640px){.robe{grid-template-columns:1fr;gap:24px}.robe .portrait{max-width:220px;margin:0 auto}}
+
+/* Portrait frame */
+.portrait{position:relative;padding:10px;background:linear-gradient(145deg,#e1c27e,var(--brass) 30%,#6f5a31 60%,var(--brass) 85%);box-shadow:0 18px 30px -18px rgba(0,0,0,.9),inset 0 0 0 1px rgba(0,0,0,.4)}
+.portrait .canvas{position:relative;aspect-ratio:3/4;max-width:100%;background:var(--oak);box-shadow:inset 0 0 0 3px #3b2e1c, inset 0 0 22px rgba(0,0,0,.8);overflow:hidden;display:grid;place-items:center}
+.portrait img{width:100%;height:100%;object-fit:cover;display:block;transition:filter .6s}
+.portrait .initials{font-family:var(--font-display);font-size:3rem;color:var(--brass-dim)}
+.portrait .vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55));pointer-events:none}
+.stamp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-14deg);border:3px solid var(--blood);color:#f0b8b2;background:rgba(40,8,6,.55);font-family:var(--font-display);letter-spacing:.2em;font-size:clamp(.8rem,2.2vw,1.05rem);padding:6px 10px;white-space:nowrap}
+.plaque{margin-top:12px;text-align:center;font-family:var(--font-display);letter-spacing:.12em;font-size:1.05rem;line-height:1.2;overflow-wrap:anywhere;padding:6px 8px;background:linear-gradient(#2b241a,#1e1912);border:1px solid var(--brass-dim);color:var(--parchment)}
+.card.out img{filter:grayscale(1) brightness(.55)}
+.card.out .plaque{color:var(--ash);text-decoration:line-through;text-decoration-color:var(--blood)}
+.you-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--parchment);color:var(--stone);font-family:var(--font-display);font-size:.7rem;letter-spacing:.2em;padding:2px 10px;z-index:2}
+
+/* Wall */
+.wall-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin:40px 0 28px;border-bottom:1px solid var(--brass-dim);padding-bottom:16px}
+.wall-head h2{font-size:clamp(1.8rem,4vw,2.6rem)}
+.tally{display:flex;gap:20px;font-variant-numeric:tabular-nums}
+.tally div{display:flex;flex-direction:column;align-items:center}
+.tally b{font-family:var(--font-display);font-size:1.8rem;font-weight:400;color:var(--brass);line-height:1}
+.tally span{font-size:.75rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ash)}
+.wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:34px 26px}
+@media (max-width:440px){.wall{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 14px}.plaque{font-size:.9rem}}
+.card{position:relative;display:flex;flex-direction:column;animation:hang .7s ease-out both}
+@keyframes hang{from{transform:translateY(-6px)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){.card{animation:none}.portrait img{transition:none}}
+.controls{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px}
+.controls .btn{flex:1 1 auto}
+.controls .btn[aria-pressed="true"]{background:var(--brass);color:var(--stone)}
+.empty{grid-column:1/-1;text-align:center;padding:60px 16px;border:1px dashed var(--brass-dim)}
+.empty p{max-width:44ch;margin:8px auto 0}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:24px}
+.panel{margin-top:48px;padding:24px;border:1px solid var(--brass-dim);background:var(--stone-2);display:flex;flex-direction:column;gap:16px}
+.panel h3{font-family:var(--font-display);font-weight:400;font-size:1.3rem;margin:0;letter-spacing:.06em;color:var(--brass)}
+.panel .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.confirm{display:flex;flex-direction:column;gap:6px;align-items:center;font-size:.9rem;text-align:center}
+.notice{border:1px solid var(--blood);background:rgba(158,43,37,.12);padding:14px 16px;margin:0}
+.panel.trial{margin:32px 0 0;border-style:dashed}
+.trial-top{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-start}
+.seg{display:flex;flex-wrap:wrap}
+.seg .btn+.btn{border-left:0}
+.seg .btn[aria-pressed="true"]{background:var(--brass);color:var(--stone)}
+.trial-add{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:14px;align-items:end}
+.trial-add input[type=file]{padding:9px 10px;font-size:.85rem}
+@media (max-width:640px){.trial-add{grid-template-columns:1fr}}
+.trial-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.gamebar{margin-top:32px;padding:20px 22px;border:1px solid var(--brass);background:linear-gradient(180deg,rgba(201,163,92,.10),rgba(201,163,92,.02));display:flex;flex-wrap:wrap;gap:16px 24px;align-items:center;justify-content:space-between}
+.gamebar .lead{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 280px}
+.gamebar .kicker{font-family:var(--font-display);letter-spacing:.24em;font-size:.75rem;color:var(--brass)}
+.gamebar .big{font-family:var(--font-display);font-size:clamp(1.4rem,3.4vw,2rem);line-height:1.15}
+.gamebar .acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.gamebar.traitor{border-color:var(--blood);background:linear-gradient(180deg,rgba(158,43,37,.28),rgba(158,43,37,.06))}
+.gamebar.traitor .kicker{color:#e9a59f}
+.role-word{font-family:var(--font-display);font-size:clamp(2rem,6vw,3rem);line-height:1;letter-spacing:.08em}
+.role-word.traitor{color:#f0b8b2}
+.role-word.faithful{color:var(--brass)}
+.role-tag{margin-top:8px;align-self:center;font-family:var(--font-display);font-size:.72rem;letter-spacing:.22em;padding:3px 10px;border:1px solid var(--brass-dim);color:var(--brass)}
+.role-tag.traitor{border-color:var(--blood);background:var(--blood);color:var(--parchment)}
+/* Round Table vote */
+.stage{margin-top:32px;padding:28px 24px;border:1px solid var(--brass);background:radial-gradient(ellipse 90% 80% at 50% 0%,rgba(201,163,92,.18),rgba(15,19,17,0) 70%),var(--stone-2);display:flex;flex-direction:column;gap:20px;text-align:center}
+.stage .kicker{font-family:var(--font-display);letter-spacing:.28em;font-size:.78rem;color:var(--brass)}
+.stage h3{font-family:var(--font-display);font-weight:400;font-size:clamp(1.7rem,4.4vw,2.6rem);margin:0;line-height:1.1;text-wrap:balance}
+.clock{font-family:var(--font-display);font-size:clamp(3rem,10vw,5rem);line-height:1;color:var(--parchment);font-variant-numeric:tabular-nums}
+.clock.low{color:#f0b8b2}
+.choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;text-align:left}
+.choice{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--brass-dim);background:var(--stone);color:var(--parchment);cursor:pointer;font:inherit;min-width:0}
+.choice img,.choice .ph{width:40px;height:52px;object-fit:cover;flex:none;background:var(--oak)}
+.choice span{overflow-wrap:anywhere;font-family:var(--font-display);letter-spacing:.06em}
+.choice[aria-pressed="true"]{border-color:var(--parchment);background:var(--brass);color:var(--stone)}
+.choice:focus-visible{outline:2px solid var(--parchment);outline-offset:2px}
+.stage .acts{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center}
+.lines{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-width:620px;width:100%;margin-inline:auto}
+.lines li{font-size:1.05rem;color:var(--ash);padding:6px 0;border-bottom:1px solid rgba(201,163,92,.18)}
+.lines li b{font-family:var(--font-display);font-weight:400;letter-spacing:.06em;color:var(--parchment)}
+.lines li.new{font-size:clamp(1.25rem,3.4vw,1.7rem);color:var(--parchment);animation:rise .5s ease-out both}
+.lines li.new .target{display:inline-block;animation:rise .6s ease-out 1.1s both}
+.lines li.new .target b{color:var(--brass)}
+.verdict{font-family:var(--font-display);font-size:clamp(1.5rem,4.2vw,2.3rem);line-height:1.2;animation:rise .7s ease-out both}
+.verdict.role-traitor{color:#f0b8b2}
+.verdict.role-faithful{color:var(--brass)}
+.tallies{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;font-variant-numeric:tabular-nums}
+.tallies span{border:1px solid var(--brass-dim);padding:3px 10px;font-size:.9rem}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.lines li.new,.lines li.new .target,.verdict{animation:none}}
+/* Community screen: one laptop/TV screen, no scrolling. The wall is sized by script to fit. */
+html.screen-mode,body.screen-mode{height:100%}
+.screen-mode .wrap{max-width:none;height:100%;display:flex;flex-direction:column;gap:12px;padding-block:14px}
+.screen-mode .crest{flex:none;gap:2px}
+.screen-mode .crest .eyebrow,.screen-mode .crest .rule{display:none}
+.screen-mode .crest h1{font-size:clamp(1.8rem,3.4vw,2.8rem)}
+.screen-mode #wallView{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px}
+.screen-mode .panel.trial{margin:0;padding:12px 16px;gap:10px;flex:none}
+.screen-mode .panel.trial .trial-add{display:none}
+.screen-mode .gamebar{margin-top:0;padding:12px 20px;flex:none}
+.screen-mode .wall-head{display:none}
+.screen-mode #wall{flex:1;min-height:0;align-content:center;justify-content:center;gap:16px;overflow:hidden}
+.screen-mode #wall .plaque{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen-mode #wall .card{animation:none}
+.screen-mode #wall .plaque{font-size:var(--fs,1rem);margin-top:10px;padding:4px 6px}
+.screen-mode #wall .role-tag{margin-top:6px}
+.screen-mode #wall .stamp{font-size:calc(var(--fs,1rem) * .8)}
+.screen-mode .bar{position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(6px + env(safe-area-inset-bottom,0px));margin:0;opacity:.35}
+.screen-mode .bar:hover,.screen-mode .bar:focus-within{opacity:1}
+.screen-mode #editMeBtn{display:none}
+.screen-mode .stage{flex:1;min-height:0;margin-top:0;justify-content:center;overflow:auto}
+.screen-mode .stage h3{font-size:clamp(2.2rem,5vw,3.6rem)}
+.screen-mode .clock{font-size:clamp(5rem,18vh,10rem)}
+.screen-mode .stage-lede{font-size:clamp(1.3rem,2.6vw,2rem);margin:0}
+.join-code{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 18px;border:1px solid var(--brass)}
+.join-code .kicker{font-family:var(--font-display);letter-spacing:.24em;font-size:.72rem;color:var(--brass)}
+.join-code .code{font-family:var(--font-display);font-size:clamp(1.8rem,4vw,3rem);letter-spacing:.14em;line-height:1.1}
+/* The vote on the community screen: everything sized to the screen's height so nothing scrolls */
+.screen-mode .stage{padding:2.2vh 24px;gap:1.8vh;overflow:hidden}
+.screen-mode .stage h3{font-size:clamp(1.6rem,6vh,3.4rem)}
+.screen-mode .clock{font-size:clamp(3.5rem,16vh,9rem)}
+.screen-mode .stage-lede{font-size:clamp(1.1rem,3.4vh,2rem)}
+.screen-mode .reveal-row{flex-wrap:nowrap;gap:3vw}
+.screen-mode .reveal-text{max-width:46vw}
+.screen-mode .reveal-call{font-size:clamp(1.6rem,7vh,4.2rem)}
+.screen-mode .reveal-sub{font-size:clamp(1.1rem,4.2vh,2.4rem)}
+.screen-mode .stage-portrait{width:min(26vh,20vw)}
+.screen-mode .stage-portrait.verdict-portrait{width:min(24vh,18vw)}
+.screen-mode .verdict{font-size:clamp(1.3rem,4.6vh,3rem)}
+.screen-mode .tallies span{font-size:clamp(.8rem,2vh,1.1rem)}
+.screen-mode .step-count{font-size:clamp(.7rem,1.8vh,1rem)}
+/* One-by-one reveal */
+.step-count{margin:0;font-variant-numeric:tabular-nums;letter-spacing:.12em;text-transform:uppercase;font-size:.8rem}
+.reveal-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:clamp(16px,4vw,48px)}
+.reveal-text{display:flex;flex-direction:column;gap:8px;min-width:0;flex:0 1 auto;max-width:min(30ch,90vw)}
+.reveal-call{display:block;font-family:var(--font-display);font-size:clamp(2rem,6vw,4.4rem);line-height:1.1;color:var(--parchment);white-space:nowrap;overflow:hidden;text-overflow:clip}
+.reveal-sub{font-family:var(--font-display);font-size:clamp(1.3rem,3.2vw,2.4rem);line-height:1.15;color:var(--brass)}
+.reveal-target{animation:rise .7s ease-out 1.2s both}
+.reveal-target .reveal-call{color:#f0b8b2}
+.stage-portrait{width:clamp(110px,22vh,240px);flex:none}
+.stage-portrait .canvas{aspect-ratio:3/4}
+.stage-portrait.verdict-portrait{align-self:center;width:clamp(110px,24vh,260px)}
+.big-btn{font-size:1.3rem;padding:18px 34px}
+@media (prefers-reduced-motion:reduce){.reveal-target{animation:none}}
+.fire-btn{border-color:#c4682d;color:#f0a36b}
+.fire-btn:hover{background:#c4682d;color:var(--stone)}
+.plain-stage{background:#050706;border-color:#050706;justify-content:center;align-items:center;min-height:60vh}
+.plain-title{font-family:var(--font-display);font-size:clamp(2.4rem,9vw,7rem);line-height:1.05;letter-spacing:.06em;color:#f0b8b2;text-wrap:balance;animation:fadein 3s ease-in both}
+@media (prefers-reduced-motion:reduce){.plain-title{animation:none}}
+.chain-stage{border-color:#7c97b8}
+.chain-stage .kicker{color:#b9cde6}
+.special-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;max-width:640px;width:100%;margin-inline:auto}
+.special-opt{display:flex;flex-direction:column;gap:6px;text-align:left;padding:16px;border:1px solid var(--brass-dim);background:var(--stone);color:var(--parchment);font:inherit;cursor:pointer;min-width:0}
+.special-opt b{font-family:var(--font-display);font-weight:400;font-size:1.2rem;letter-spacing:.06em;color:var(--brass)}
+.special-opt span{color:var(--ash);font-size:.92rem}
+.special-opt:hover:not(:disabled){border-color:var(--brass)}
+.special-opt:disabled{opacity:.45;cursor:not-allowed}
+.special-opt:focus-visible{outline:2px solid var(--parchment);outline-offset:2px}
+.card.leaving{opacity:0;transform:scale(.94);transition:opacity 1.2s ease,transform 1.2s ease}
+@media (prefers-reduced-motion:reduce){.card.leaving{transition:none}}
+.powers-stage{border-style:dashed}
+.shield-note{flex-basis:100%;border:1px solid var(--brass);padding:8px 12px;color:var(--brass);font-family:var(--font-display);letter-spacing:.08em}
+.role-tag.dagger{border-color:#b08bd0;color:#dcc6ef}
+.dagger-note{border-color:#b08bd0;color:#dcc6ef}
+.reveal-target.dagger-note{font-family:var(--font-display);font-size:clamp(1rem,3vh,1.6rem);letter-spacing:.06em;border:0;padding:0}
+.dagger-box{display:flex;flex-direction:column;align-items:center;gap:6px}
+.role-tag.shield{border-color:#7c97b8;color:#b9cde6}
+.fire-stage{border-color:#c4682d;background:radial-gradient(ellipse 90% 80% at 50% 100%,rgba(196,104,45,.25),rgba(15,19,17,0) 70%),var(--stone-2)}
+.fire-stage .kicker{color:#f0a36b}
+.fire-row{display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(12px,2.4vw,28px)}
+.fire-player{margin:0;display:flex;flex-direction:column;align-items:center;width:min(150px,28vw)}
+.fire-player .stage-portrait{width:100%}
+.fire-player .plaque{width:100%;margin-top:8px;font-size:1rem}
+.fire-player .role-tag{margin-top:6px}
+.fire-choices .big-btn{min-width:min(240px,80vw)}
+.final-traitor{color:#f0b8b2}
+.final-faithful{color:var(--brass)}
+.screen-mode .fire-row{flex-wrap:nowrap}
+.screen-mode .fire-player{width:min(24vh,16vw)}
+.screen-mode .fire-player .plaque{font-size:clamp(.8rem,2.2vh,1.3rem)}
+.turret-stage{border-color:var(--blood);background:radial-gradient(ellipse 90% 80% at 50% 0%,rgba(158,43,37,.22),rgba(15,19,17,0) 70%),var(--stone-2)}
+.turret-stage .kicker{color:#e9a59f}
+.turret-list{list-style:none;margin:0 auto;padding:0;display:flex;flex-direction:column;gap:6px;text-align:left;max-width:520px;width:100%}
+.turret-list li{padding:6px 0;border-bottom:1px solid rgba(201,163,92,.18);overflow-wrap:anywhere}
+.role-tag.safe{border-color:#6f8f6a;color:#bcd7b5}
+.card.breakfast,.screen-mode #wall .card.breakfast{animation:fadein 3s ease-in both}
+.card.breakfast.out,.screen-mode #wall .card.breakfast.out{animation-duration:4.5s}
+@keyframes fadein{from{opacity:0;filter:brightness(.2)}to{opacity:1;filter:none}}
+@media (prefers-reduced-motion:reduce){.card.breakfast,.screen-mode #wall .card.breakfast{animation:none}}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--parchment);color:var(--stone);padding:10px 18px;font-family:var(--font-display);letter-spacing:.1em;z-index:20}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="crest">
+    <span class="eyebrow">Welcome to the castle</span>
+    <h1>The Traitors</h1>
+    <div class="rule"><span>◆</span></div>
+  </header>
+
+  <!-- GATE -->
+  <section id="gate" class="gate">
+    <p class="hint muted">Speak the word you were given at the door. Players and the host each have their own.</p>
+    <form id="gateForm" autocomplete="off">
+      <div class="field">
+        <label for="codeInput">Entry code</label>
+        <input id="codeInput" class="code-input" maxlength="24" required spellcheck="false" autocapitalize="characters">
+      </div>
+      <p id="gateError" class="error" role="alert"></p>
+      <button class="btn solid" type="submit" id="gateBtn">Enter the castle</button>
+    </form>
+  </section>
+
+  <!-- FIRST-TIME SETUP -->
+  <section id="setup" class="gate" hidden>
+    <p class="hint muted">Welcome. Choose the four codes for your castle. The host code makes this device the host. You can change any code later from the host panel.</p>
+    <form id="setupForm" autocomplete="off" style="width:min(420px,100%)">
+      <div class="field"><label for="setHost">Host code</label><input id="setHost" maxlength="24" required spellcheck="false" value="CASTLE-HOST"></div>
+      <div class="field"><label for="setPlayer">Player code</label><input id="setPlayer" maxlength="24" required spellcheck="false" value="FAITHFUL"></div>
+      <div class="field"><label for="setScreen">Community screen code</label><input id="setScreen" maxlength="24" required spellcheck="false" value="ROUND-TABLE"></div>
+      <div class="field"><label for="setTrial">Trial code</label><input id="setTrial" maxlength="24" required spellcheck="false" value="TRIAL"></div>
+      <p id="setupError" class="error" role="alert"></p>
+      <button class="btn solid" type="submit" id="setupBtn">Open the castle</button>
+    </form>
+  </section>
+
+  <!-- PROFILE -->
+  <section id="profile" class="robe" hidden>
+    <label class="photo-drop" for="photoInput">
+      <div class="portrait"><div class="canvas" id="previewCanvas"><span class="initials">?</span><div class="vignette"></div></div></div>
+      <input id="photoInput" type="file" accept="image/*">
+      <span class="note muted">Tap the frame to choose your portrait</span>
+    </label>
+    <form id="profileForm" autocomplete="off">
+      <div>
+        <h2 style="font-size:2rem">Take your seat</h2>
+        <p class="muted" style="margin:6px 0 0">Your name and portrait go up on the wall for every player to see.</p>
+      </div>
+      <div class="field">
+        <label for="nameInput">Your name</label>
+        <input id="nameInput" maxlength="28" required>
+      </div>
+      <p id="profileError" class="error" role="alert"></p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <button class="btn solid" type="submit" id="saveBtn">Hang my portrait</button>
+        <button class="link" type="button" id="toWallBtn" hidden>Back to the wall</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- WALL -->
+  <section id="wallView" hidden>
+    <section id="trialPanel" class="panel trial" hidden>
+      <div class="trial-top">
+        <div>
+          <h3>Trial mode</h3>
+          <p class="muted" style="margin:4px 0 0">Everything here stays on this device. Real players never see these portraits.</p>
+        </div>
+        <div class="seg" role="group" aria-label="View the wall as">
+          <button class="btn small" type="button" id="viewHost" aria-pressed="true">Host view</button>
+          <button class="btn small" type="button" id="viewPlayer" aria-pressed="false">Player view</button>
+          <button class="btn small" type="button" id="viewScreen" aria-pressed="false">Community screen</button>
+        </div>
+      </div>
+      <form id="trialAddForm" class="trial-add" autocomplete="off">
+        <div class="field"><label for="trialName">Player name</label><input id="trialName" maxlength="28" placeholder="Leave blank for a random name"></div>
+        <div class="field"><label for="trialPhoto">Photo (optional)</label><input id="trialPhoto" type="file" accept="image/*"></div>
+        <button class="btn" type="submit">Add player</button>
+      </form>
+      <div class="trial-actions">
+        <button class="btn small" type="button" id="trialBulk">Add 8 sample players</button>
+        <button class="btn small" type="button" id="trialJoin">Join as a player</button>
+        <button class="btn small danger" type="button" id="trialClear">Clear the trial wall</button>
+        <span id="trialClearConfirm" hidden class="confirm" style="flex-direction:row;gap:8px">Remove every trial player?
+          <button class="btn small danger" type="button" id="trialClearYes">Yes, clear</button>
+          <button class="link" type="button" id="trialClearNo">Cancel</button></span>
+      </div>
+    </section>
+    <section id="plainStage" class="stage plain-stage" hidden><span class="plain-title">Murder in plain sight</span></section>
+    <section id="powersStage" class="stage powers-stage" hidden></section>
+    <section id="chainStage" class="stage chain-stage" hidden aria-live="polite"></section>
+    <section id="turretStage" class="stage turret-stage" hidden aria-live="polite"></section>
+    <section id="voteStage" class="stage" hidden aria-live="polite"></section>
+    <section id="fireStage" class="stage fire-stage" hidden aria-live="polite"></section>
+    <section id="gameBar" class="gamebar" hidden aria-live="polite"></section>
+    <div class="wall-head" id="wallHead">
+      <div>
+        <h2 id="wallTitle">The Players</h2>
+        <p class="muted" style="margin:4px 0 0" id="wallSub">Look closely. Some of these faces are lying to you.</p>
+      </div>
+      <div class="tally">
+        <div><b id="tIn">0</b><span>Remaining</span></div>
+        <div><b id="tBan">0</b><span>Banished</span></div>
+        <div><b id="tMur">0</b><span>Murdered</span></div>
+      </div>
+    </div>
+    <div id="wall" class="wall"></div>
+
+    <div class="bar">
+      <button class="link" type="button" id="editMeBtn" hidden>Edit my name or portrait</button>
+      <button class="link" type="button" id="leaveBtn">Leave the castle</button>
+    </div>
+
+    <section id="hostPanel" class="panel" hidden>
+      <h3>Host's table</h3>
+      <p class="muted" style="margin:0">Mark players as banished or murdered from each portrait. Change the entry codes here before your guests arrive.</p>
+      <form id="codesForm" class="row" autocomplete="off">
+        <div class="field"><label for="hostCode">Host code</label><input id="hostCode" maxlength="24" required spellcheck="false"></div>
+        <div class="field"><label for="playerCode">Player code</label><input id="playerCode" maxlength="24" required spellcheck="false"></div>
+        <div class="field"><label for="trialCode">Trial code</label><input id="trialCode" maxlength="24" required spellcheck="false"></div>
+        <div class="field"><label for="screenCode">Community screen code</label><input id="screenCode" maxlength="24" required spellcheck="false"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Save codes</button></div>
+      </form>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <button class="btn small" type="button" id="resetStatusBtn">Bring everyone back</button>
+        <span id="resetConfirm" hidden class="confirm" style="flex-direction:row;gap:8px">Clear every banishment and murder?
+          <button class="btn small danger" type="button" id="resetYes">Yes, reset</button>
+          <button class="link" type="button" id="resetNo">Cancel</button></span>
+      </div>
+    </section>
+  </section>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+const DEFAULT_CODES = { host: "", player: "", trial: "", screen: "" };
+const readCodes = d => ({ host: d.host || DEFAULT_CODES.host, player: d.player || DEFAULT_CODES.player, trial: d.trial || DEFAULT_CODES.trial, screen: d.screen || DEFAULT_CODES.screen });
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} },
+  del(k){ try { localStorage.removeItem(k); } catch(e){} }
+};
+
+let db = null, user = null, me = null, isOwner = false;
+let codes = { ...DEFAULT_CODES };
+let players = [], statuses = {};
+let role = store.get("traitors.role"); // "host" | "player" | null
+let photoData = null;
+let pendingRemove = null;
+let subsStarted = false;
+let game = { started:false }, roles = {}, myRole = null;   // live game
+let statusRoles = {}, myAllies = [], myRecruitedRound = null;                        // revealed roles, fellow traitors
+let liveVote = null, liveVotes = {}, myLiveVote = null;     // voting
+let gbConfirm = null, revealed = false, hideRoles = false;  // local UI state
+
+function show(view){
+  for (const v of ["gate","profile","wallView"]) $(v).hidden = v !== view;
+  window.scrollTo(0,0);
+}
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(()=> t.hidden = true, 2200);
+}
+const norm = s => String(s||"").trim().toUpperCase();
+const initials = n => (n||"?").split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase() || "?";
+
+/* ---------- boot ---------- */
+let memberKind = null, needsSetup = false;
+function fbReady(){
+  return new Promise(res => { if (window.FB && window.FB.ready) res(); else window.addEventListener("fb-ready", res, { once: true }); });
+}
+async function boot(){
+  loadTrial();
+  if (role === "trial") enterTrial();
+  if (window.FB_MISSING_CONFIG){ if (role !== "trial") $("gateError").textContent = "This site isn't connected to its database yet. Paste your Firebase settings into index.html (see SETUP.md)."; return; }
+  await fbReady();
+  if (window.FB.error){ if (role !== "trial") gateUnavailable(); return; }
+  db = window.FB.db; me = window.FB.uid;
+  try {
+    const [setup, host, mem] = await Promise.all([db.doc("meta/setup").get(), db.doc("hosts/"+me).get(), db.doc("members/"+me).get()]);
+    needsSetup = !setup.exists;
+    isOwner = host.exists;
+    memberKind = mem.exists ? mem.data().kind : null;
+  } catch(_){ gateUnavailable(); return; }
+  if (needsSetup){ showSetup(); return; }
+  const allowed = { host: isOwner, player: memberKind === "player", screen: memberKind === "screen" || isOwner, trial: true };
+  if (role && role !== "trial" && !allowed[role]){ role = null; store.del("traitors.role"); }
+  if (isOwner || memberKind) startSubs();
+  if (role === "host") enterHost();
+  else if (role === "player") routePlayer();
+  else if (role === "screen") enterScreen();
+}
+function gateUnavailable(){
+  $("gateError").textContent = "The castle can't be reached right now. Check your internet connection and reload the page.";
+}
+function showSetup(){
+  $("gate").hidden = true; $("setup").hidden = false;
+}
+$("setupForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const h = norm($("setHost").value), pl = norm($("setPlayer").value), sc = norm($("setScreen").value), tr = norm($("setTrial").value);
+  if (!h || !pl || !sc || !tr){ $("setupError").textContent = "Fill in all four codes."; return; }
+  if (new Set([h,pl,sc,tr]).size < 4){ $("setupError").textContent = "Each code must be different."; return; }
+  const btn = $("setupBtn"); btn.disabled = true;
+  try {
+    await db.doc("private/codes").set({ host:h, player:pl, screen:sc, trial:tr, owner: me });
+    await db.doc("hosts/"+me).set({ code: h, at: Date.now() });
+    await db.doc("settings/public").set({ player: pl });
+    await db.doc("meta/setup").set({ done: true, at: Date.now() });
+    isOwner = true; needsSetup = false;
+    codes = { host:h, player:pl, screen:sc, trial:tr };
+    $("setup").hidden = true;
+    startSubs();
+    role = "host"; store.set("traitors.role","host"); enterHost();
+    toast("Your castle is ready");
+  } catch(err){
+    $("setupError").textContent = "Setup didn't finish. Check that you published the security rules from SETUP.md, then try again.";
+  } finally { btn.disabled = false; }
+});
+function startSubs(){
+  if (subsStarted) return; subsStarted = true;
+  db.doc("settings/public").onSnapshot(s => {
+    if (s.exists && s.data().player) codes = { ...codes, player: s.data().player };
+    renderGameBar();
+  }, ()=>{});
+  if (isOwner){
+    db.doc("private/codes").onSnapshot(s => {
+      if (s.exists) codes = readCodes(s.data());
+      if (role === "host"){ $("hostCode").value ||= codes.host; $("playerCode").value ||= codes.player; $("trialCode").value ||= codes.trial; $("screenCode").value ||= codes.screen; }
+    }, ()=>{});
+  }
+  db.collection("players").onSnapshot(s => {
+    players = s.docs.filter(d=>d.exists).map(d => ({ id:d.id, ...d.data() }))
+      .sort((a,b)=> (a.joinedAt||0) - (b.joinedAt||0));
+    renderWall();
+  }, ()=>{});
+  db.collection("status").onSnapshot(s => {
+    statuses = {}; statusRoles = {};
+    s.docs.forEach(d => { if (d.exists){ const v = d.data(); statuses[d.id] = v.state; if (v.role) statusRoles[d.id] = v.role; } });
+    renderWall();
+  }, ()=>{});
+  db.doc("game/vote").onSnapshot(s => { liveVote = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+  db.doc("game/firepit").onSnapshot(s => { liveFire = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+  db.doc("game/chain").onSnapshot(s => { liveChain = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+  db.doc("game/plain").onSnapshot(s => { livePlain = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+  db.doc("game/murder").onSnapshot(s => { liveMurder = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+  if (isOwner){
+    db.doc("host/turret").onSnapshot(s => { hostTurret = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+    db.doc("host/plan").onSnapshot(s => { murderPlan = s.exists ? s.data() : null; }, ()=>{});
+    db.doc("host/mips").onSnapshot(s => { hostMips = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+    db.collection("cpicks").onSnapshot(s => { cpicks = {}; s.docs.forEach(d => { if (d.exists) cpicks[d.id] = d.data(); }); }, ()=>{});
+    db.collection("fpicks").onSnapshot(s => { fpicks = {}; s.docs.forEach(d => { if (d.exists) fpicks[d.id] = d.data(); }); renderFire(true); }, ()=>{});
+    db.collection("powers").onSnapshot(s => { hostPowers = {}; s.docs.forEach(d => { if (d.exists) hostPowers[d.id] = d.data(); }); renderWall(); }, ()=>{});
+    db.collection("tpicks").onSnapshot(s => { tpicks = {}; s.docs.forEach(d => { if (d.exists) tpicks[d.id] = d.data(); }); renderTurret(true); }, ()=>{});
+  } else if (me){
+    db.doc("turret/"+me).onSnapshot(s => { myTurret = s.exists ? s.data() : null; renderTurret(true); }, ()=>{});
+    db.doc("cpicks/"+me).onSnapshot(s => { myCpick = s.exists ? s.data() : null; renderChain(true); }, ()=>{});
+    db.doc("fpicks/"+me).onSnapshot(s => { myFpick = s.exists ? s.data() : null; renderFire(true); }, ()=>{});
+    db.doc("powers/"+me).onSnapshot(s => { myPower = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+    db.doc("tpicks/"+me).onSnapshot(s => { myPick = s.exists ? s.data() : null; renderTurret(true); }, ()=>{});
+  }
+  if (isOwner){
+    db.collection("votes").onSnapshot(s => {
+      liveVotes = {}; s.docs.forEach(d => { if (d.exists) liveVotes[d.id] = d.data(); });
+    }, ()=>{});
+  } else if (me){
+    db.doc("votes/"+me).onSnapshot(s => { myLiveVote = s.exists ? s.data() : null; renderVote(true); }, ()=>{});
+  }
+  db.doc("game/state").onSnapshot(s => {
+    const was = game.started;
+    game = s.exists ? s.data() : { started:false };
+    if (was !== !!game.started) revealed = false;
+    renderWall();
+  }, ()=>{});
+  if (isOwner){
+    db.collection("roles").onSnapshot(s => {
+      roles = {}; s.docs.forEach(d => { if (d.exists) roles[d.id] = d.data().role; });
+      if (me){ myRole = roles[me] || null; myAllies = myRole === "traitor" ? Object.keys(roles).filter(k => k !== me && roles[k] === "traitor") : []; }
+      renderWall();
+    }, ()=>{});
+  } else if (me){
+    db.doc("roles/"+me).onSnapshot(s => {
+      const d = s.exists ? s.data() : null;
+      const before = myRole;
+      myRole = d ? d.role : null; myAllies = d && Array.isArray(d.allies) ? d.allies : [];
+      myRecruitedRound = d && d.recruitedRound ? d.recruitedRound : null;
+      if (before && before !== myRole) revealed = false;
+      renderWall();
+    }, ()=>{});
+  }
+}
+
+/* ---------- game: roles ---------- */
+const gameState = () => isTrial() ? trialGame : game;
+const roleMap = () => isTrial() ? trialGame.roles : roles;
+const ownRole = () => isTrial() ? trialGame.roles[TRIAL_ME] || null : myRole;
+function traitorCount(n){ return n < 5 ? 0 : n <= 10 ? 2 : 3; }
+function shuffle(a){
+  const r = new Uint32Array(a.length); crypto.getRandomValues(r);
+  for (let i = a.length - 1; i > 0; i--){ const j = r[i] % (i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+async function startGame(){
+  gbConfirm = null;
+  const ids = allPlayers().map(p => p.id), n = ids.length, t = traitorCount(n);
+  if (!t){ toast("You need at least 5 players to start"); renderWall(); return; }
+  const order = shuffle(ids.slice());
+  const assign = {}; order.forEach((id, i) => assign[id] = i < t ? "traitor" : "faithful");
+  if (isTrial()){
+    trialGame = { started:true, traitors:t, players:n, roles:assign }; trialStatus = {}; trialVotes = {}; trialPicks = {};
+    saveTrial(); revealed = false; renderWall(); toast("The game has begun"); return;
+  }
+  try {
+    await Promise.all(Object.keys(statuses).map(id => db.doc("status/"+id).delete()));
+    await Promise.all(Object.entries(roles).filter(([id]) => !(id in assign)).map(([id]) => db.doc("roles/"+id).delete()));
+    const traitorIds = order.slice(0, t);
+    await Promise.all(order.map(id => db.doc("roles/"+id).set(assign[id] === "traitor"
+      ? { role:"traitor", allies: traitorIds.filter(x => x !== id) }
+      : { role:"faithful" })));
+    await db.doc("game/vote").delete().catch(()=>{});
+    await clearNightData();
+    await db.doc("game/state").set({ started:true, startedAt:Date.now(), traitors:t, players:n });
+    toast("The game has begun");
+  } catch(_){ toast("The game couldn't start. Check your connection and try again."); renderWall(); }
+}
+async function clearNightData(){
+  const t = hostTurret;
+  await db.doc("game/murder").delete().catch(()=>{});
+  await db.doc("host/plan").delete().catch(()=>{});
+  await db.doc("host/turret").delete().catch(()=>{});
+  await db.doc("host/mips").delete().catch(()=>{});
+  await db.doc("game/plain").delete().catch(()=>{});
+  await db.doc("game/chain").delete().catch(()=>{});
+  await Promise.all(Object.keys(cpicks).map(id => db.doc("cpicks/"+id).delete().catch(()=>{})));
+  if (t) await Promise.all(t.traitors.map(id => db.doc("turret/"+id).delete().catch(()=>{})));
+  await Promise.all(Object.keys(tpicks).map(id => db.doc("tpicks/"+id).delete().catch(()=>{})));
+  await Promise.all(Object.keys(hostPowers).map(id => db.doc("powers/"+id).delete().catch(()=>{})));
+  await db.doc("game/firepit").delete().catch(()=>{});
+  await Promise.all(Object.keys(fpicks).map(id => db.doc("fpicks/"+id).delete().catch(()=>{})));
+}
+async function endGame(){
+  gbConfirm = null;
+  if (isTrial()){ trialGame = { started:false, roles:{} }; trialStatus = {}; trialVotes = {}; saveTrial(); renderWall(); toast("Back to the lobby"); return; }
+  try {
+    await db.doc("game/state").set({ started:false });
+    await db.doc("game/vote").delete().catch(()=>{});
+    await clearNightData();
+    await Promise.all(Object.keys(liveVotes).map(id => db.doc("votes/"+id).delete().catch(()=>{})));
+    await Promise.all(Object.keys(roles).map(id => db.doc("roles/"+id).delete()));
+    await Promise.all(Object.keys(statuses).map(id => db.doc("status/"+id).delete()));
+    toast("Back to the lobby");
+  } catch(_){ toast("The game couldn't be ended. Try again."); renderWall(); }
+}
+function renderGameBar(){
+  const bar = $("gameBar");
+  const host = role === "host" || (isTrial() && trialView === "host");
+  const player = role === "player" || (isTrial() && trialView === "player");
+  const g = gameState();
+  bar.className = "gamebar";
+  const n = allPlayers().length, t = traitorCount(n);
+  if (isScreenView()){
+    const v = currentVote();
+    if (g.started && plainAnnounced() && !murderActive()){ bar.hidden = true; return; }
+    if (g.started && chainLive() && !murderActive()){ bar.hidden = false; bar.innerHTML = chainBanner(); return; }
+    if (g.started && murderActive()){ bar.hidden = false; const h = breakfastBanner(); if (h !== lastBannerHtml){ lastBannerHtml = h; bar.innerHTML = h; } return; }
+    lastBannerHtml = "";
+    if (g.started && ((v && (v.phase === "open" || v.phase === "reveal" || v.phase === "done")) || fireOnStage())){ bar.hidden = true; return; }
+    bar.hidden = false;
+    const living = livingIds().length;
+    bar.innerHTML = g.started
+      ? `<div class="lead"><span class="kicker">Game in progress</span><span class="big">${living} player${living === 1 ? "" : "s"} remain. Traitors may still be among them.</span><span class="muted">Trust no one. The Round Table will decide who leaves the castle.</span></div>`
+      : `<div class="lead"><span class="kicker">Before the game</span><span class="big">The doors are open</span><span class="muted">${n} player${n === 1 ? " has" : "s have"} taken a seat. Open the castle link on your phone and enter the player code to hang your portrait.</span></div>
+         <div class="join-code"><span class="kicker">Player code</span><span class="code">${escapeHtml(codes.player)}</span></div>`;
+    return;
+  }
+  if (!host && !player){ bar.hidden = true; return; }
+  bar.hidden = false;
+
+  if (host && !g.started){
+    const msg = t ? `${n} players at the wall. Starting now makes <b>${t} Traitors</b>.`
+                  : `${n} of the 5 players needed are at the wall.`;
+    bar.innerHTML = `<div class="lead"><span class="kicker">Before the game</span><span class="big">The doors are open</span><span class="muted">${msg} Late arrivals can't join once the game starts.</span></div>
+      <div class="acts">${gbConfirm === "start"
+        ? `<span>Deal the roles now?</span><button class="btn solid" data-act="start-yes">Yes, start</button><button class="link" data-act="cancel">Cancel</button>`
+        : `<button class="btn solid" data-act="start" ${t ? "" : "disabled"}>Start game</button>`}</div>`;
+  } else if (host){
+    const tr = Object.values(roleMap()).filter(r => r === "traitor").length;
+    bar.innerHTML = `<div class="lead"><span class="kicker">Game in progress</span><span class="big">${tr} Traitors walk among ${g.players || n}</span><span class="muted">Roles show under each portrait. Hide them before you put this screen where players can see it.</span></div>
+      <div class="acts">${voteBusy() || turretOrMurderBusy() || fireLive(fireState()) ? "" : `<button class="btn solid" data-act="vote" ${livingIds().length >= 3 ? "" : "disabled"}>Start vote</button><button class="btn danger" data-act="turret">Turret</button><button class="btn small danger" data-act="special" aria-pressed="${specialOpen}">Special murders</button>${livingIds().length <= 5 ? `<button class="btn fire-btn" data-act="firepit">${livingIds().length <= 2 ? "Final reveal" : "Fire Pit"}</button>` : ""}`}<button class="btn small" data-act="powers" aria-pressed="${powersOpen}">Powers</button><button class="btn small" data-act="toggle-roles" aria-pressed="${hideRoles}">${hideRoles ? "Show roles" : "Hide roles"}</button>${gbConfirm === "end"
+        ? `<span>End the game and clear all roles?</span><button class="btn small danger" data-act="end-yes">Yes, end</button><button class="link" data-act="cancel">Cancel</button>`
+        : `<button class="btn small danger" data-act="end">End game</button>`}</div>`;
+  } else if (!g.started){
+    bar.innerHTML = `<div class="lead"><span class="kicker">Before the game</span><span class="big">Wait for the host</span><span class="muted">Roles are dealt in secret when the host starts the game. Your role will appear here, for your eyes only.</span></div>`;
+  } else {
+    const r = ownRole();
+    if (!r){
+      bar.innerHTML = `<div class="lead"><span class="kicker">Game in progress</span><span class="big">You have no role this round</span><span class="muted">You joined after the roles were dealt. Ask the host about the next round.</span></div>`;
+    } else if (!revealed){
+      bar.innerHTML = `<div class="lead"><span class="kicker">${ownRecruited() ? "Your role has changed" : "Your role has been chosen"}</span><span class="big">Shield your screen</span><span class="muted">Make sure nobody is looking, then reveal your role.</span></div>
+        <div class="acts"><button class="btn solid" data-act="reveal">Reveal my role</button></div>`;
+    } else {
+      const tr = r === "traitor";
+      if (tr) bar.className = "gamebar traitor";
+      bar.innerHTML = `<div class="lead"><span class="kicker">${ownRecruited() && tr ? "You have been recruited. You are now" : "You are"}</span><span class="role-word ${tr ? "traitor" : "faithful"}">${tr ? "A Traitor" : "Faithful"}</span><span class="muted">${tr
+        ? "Keep it hidden. Blend in with the Faithful and survive to the end. " + allyLine()
+        : "Find the Traitors and banish them before they pick you off."}</span></div>
+        ${shieldNote()}<div class="acts"><button class="btn small" data-act="hide">Hide my role</button></div>`;
+    }
+  }
+}
+$("gameBar").addEventListener("click", e => {
+  const a = e.target.closest("[data-act]")?.dataset.act; if (!a) return;
+  if (a === "start" || a === "end"){ gbConfirm = a; renderWall(); }
+  else if (a === "cancel"){ gbConfirm = null; renderWall(); }
+  else if (a === "start-yes") startGame();
+  else if (a === "end-yes") endGame();
+  else if (a === "toggle-roles"){ hideRoles = !hideRoles; renderWall(); }
+  else if (a === "reveal"){ revealed = true; renderWall(); }
+  else if (a === "hide"){ revealed = false; renderWall(); }
+  else if (a === "vote") startVote();
+  else if (a === "turret") startTurret();
+  else if (a === "plain"){ plainSetup = true; plainSel = null; renderWall(); }
+  else if (a === "special"){ specialOpen = !specialOpen; chainSetup = false; plainSetup = false; renderWall(); }
+  else if (a === "firepit") startFirePit();
+  else if (a === "powers"){ powersOpen = !powersOpen; renderWall(); }
+});
+
+/* ---------- gate ---------- */
+$("gateForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const c = norm($("codeInput").value);
+  $("gateError").textContent = "";
+  if (!c) return;
+  if (window.FB_MISSING_CONFIG){ $("gateError").textContent = "This site isn't connected to its database yet. See SETUP.md."; return; }
+  if (!db){ gateUnavailable(); return; }
+  const btn = $("gateBtn"); btn.disabled = true;
+  // Each attempt is checked by the database's security rules against the real codes.
+  const tryWrite = async (path, data) => { try { await db.doc(path).set(data); return true; } catch(_){ return false; } };
+  try {
+    if (await tryWrite("hosts/"+me, { code: c, at: Date.now() })){
+      isOwner = true; startSubs(); role = "host"; store.set("traitors.role","host"); enterHost();
+    } else if (await tryWrite("members/"+me, { kind: "player", code: c, at: Date.now() })){
+      memberKind = "player"; startSubs(); role = "player"; store.set("traitors.role","player"); routePlayer();
+    } else if (await tryWrite("members/"+me, { kind: "screen", code: c, at: Date.now() })){
+      memberKind = "screen"; startSubs(); role = "screen"; store.set("traitors.role","screen"); enterScreen();
+    } else if (await tryWrite("members/"+me, { kind: "trial", code: c, at: Date.now() })){
+      memberKind = memberKind || "trial"; role = "trial"; store.set("traitors.role","trial"); enterTrial();
+    } else {
+      $("gateError").textContent = "That code isn't right. Check with your host and try again.";
+    }
+  } finally { btn.disabled = false; }
+  $("codeInput").value = "";
+});
+
+function setScreenMode(on){ document.documentElement.classList.toggle("screen-mode", on); document.body.classList.toggle("screen-mode", on); }
+function enterScreen(){
+  setScreenMode(true);
+  $("trialPanel").hidden = true;
+  $("hostPanel").hidden = true;
+  $("editMeBtn").hidden = true;
+  $("wallTitle").textContent = "The Players";
+  $("wallSub").textContent = "Look closely. Some of these faces are lying to you.";
+  show("wallView"); renderWall();
+}
+function enterHost(){
+  setScreenMode(false);
+  $("trialPanel").hidden = true;
+  $("hostPanel").hidden = false;
+  $("codesForm").hidden = false;
+  $("editMeBtn").hidden = true;
+  $("wallTitle").textContent = "The Players";
+  $("wallSub").textContent = "You are hosting. Only you can see the controls under each portrait.";
+  $("hostCode").value = codes.host; $("playerCode").value = codes.player; $("trialCode").value = codes.trial; $("screenCode").value = codes.screen;
+  show("wallView"); renderWall();
+}
+async function routePlayer(){
+  setScreenMode(false);
+  $("trialPanel").hidden = true;
+  $("hostPanel").hidden = true;
+  $("editMeBtn").hidden = false;
+  $("wallSub").textContent = "Look closely. Some of these faces are lying to you.";
+  let mine = players.find(p => p.id === me);
+  if (!mine && db && me){ try { mine = (await db.doc("players/"+me).get()).exists; } catch(_){} }
+  if (mine){ show("wallView"); renderWall(); }
+  else openProfile();
+}
+
+/* ---------- trial mode (local only) ---------- */
+const TRIAL_ME = "trial-you";
+let trialPlayers = [], trialStatus = {}, trialView = "host", trialGame = { started:false, roles:{} };
+const isTrial = () => role === "trial";
+const myId = () => isTrial() ? TRIAL_ME : me;
+const allPlayers = () => isTrial() ? trialPlayers : players;
+const allStatus = () => isTrial() ? trialStatus : statuses;
+const SAMPLE_NAMES = ["Ada","Bram","Cora","Dev","Elsie","Finn","Greer","Hal","Isla","Jonah","Kit","Lena","Moss","Nell","Otto","Pia","Quinn","Rory","Saffy","Tam"];
+
+function loadTrial(){
+  try { const t = JSON.parse(store.get("traitors.trial") || "null"); if (t){ trialPlayers = t.players || []; trialStatus = t.status || {}; if (t.game) trialGame = { roles:{}, ...t.game }; } } catch(_){}
+}
+function saveTrial(){
+  try { localStorage.setItem("traitors.trial", JSON.stringify({ players: trialPlayers, status: trialStatus, game: trialGame })); }
+  catch(_){ /* storage full or blocked: trial still works for this visit */ }
+}
+function enterTrial(){
+  $("trialPanel").hidden = false;
+  setTrialView(trialView);
+  show("wallView"); renderWall();
+}
+function setTrialView(v){
+  trialView = v;
+  $("viewHost").setAttribute("aria-pressed", v === "host" ? "true" : "false");
+  $("viewPlayer").setAttribute("aria-pressed", v === "player" ? "true" : "false");
+  $("viewScreen").setAttribute("aria-pressed", v === "screen" ? "true" : "false");
+  setScreenMode(v === "screen");
+  $("hostPanel").hidden = v !== "host";
+  $("codesForm").hidden = true;
+  $("editMeBtn").hidden = v !== "player" || !trialPlayers.some(p => p.id === TRIAL_ME);
+  $("wallSub").textContent = v === "host"
+    ? "Trial, host view. These are the controls you'll have on game night."
+    : v === "player" ? "Trial, player view. This is what your guests will see."
+    : "Trial, community screen. This is what goes up on the wall for the whole room.";
+  renderWall();
+}
+function nextSampleName(){
+  const used = new Set(trialPlayers.map(p => p.name));
+  const free = SAMPLE_NAMES.filter(n => !used.has(n));
+  return free.length ? free[Math.floor(Math.random()*free.length)] : "Guest " + (trialPlayers.length + 1);
+}
+function samplePortrait(name, i){
+  const W = 360, H = 480, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  const hue = (i * 47 + 20) % 360;
+  const g = x.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, `hsl(${hue} 30% 34%)`); g.addColorStop(1, `hsl(${hue} 35% 14%)`);
+  x.fillStyle = g; x.fillRect(0,0,W,H);
+  x.fillStyle = `hsl(${hue} 18% 72%)`;
+  x.beginPath(); x.arc(W/2, 190, 74, 0, Math.PI*2); x.fill();
+  x.beginPath(); x.ellipse(W/2, 470, 150, 170, 0, Math.PI, 0); x.fill();
+  x.fillStyle = `hsl(${hue} 35% 18%)`;
+  x.font = "64px Georgia, serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText(initials(name), W/2, 194);
+  return cv.toDataURL("image/jpeg", 0.8);
+}
+function addTrialPlayer(name, photo){
+  const i = trialPlayers.length;
+  trialPlayers.push({ id: "trial-" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, photo: photo || samplePortrait(name, i + 3), joinedAt: Date.now() + i });
+}
+$("viewHost").addEventListener("click", ()=> setTrialView("host"));
+$("viewPlayer").addEventListener("click", ()=> setTrialView("player"));
+$("viewScreen").addEventListener("click", ()=> setTrialView("screen"));
+$("trialAddForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const name = $("trialName").value.trim().replace(/\s+/g," ") || nextSampleName();
+  const f = $("trialPhoto").files?.[0];
+  let photo = null;
+  if (f){ try { photo = await toPortrait(f); } catch(_){ toast("That photo couldn't be read. Added without it."); } }
+  addTrialPlayer(name, photo); saveTrial(); renderWall();
+  $("trialName").value = ""; $("trialPhoto").value = "";
+  toast(name + " added");
+});
+$("trialBulk").addEventListener("click", ()=> {
+  for (let k = 0; k < 8; k++) addTrialPlayer(nextSampleName());
+  saveTrial(); renderWall(); toast("8 sample players added");
+});
+$("trialJoin").addEventListener("click", ()=> { setTrialView("player"); openProfile(); });
+$("trialClear").addEventListener("click", ()=> { $("trialClearConfirm").hidden = false; });
+$("trialClearNo").addEventListener("click", ()=> { $("trialClearConfirm").hidden = true; });
+$("trialClearYes").addEventListener("click", ()=> {
+  $("trialClearConfirm").hidden = true;
+  trialPlayers = []; trialStatus = {}; trialGame = { started:false, roles:{} }; saveTrial(); setTrialView(trialView); toast("Trial wall cleared");
+});
+
+/* ---------- profile ---------- */
+async function openProfile(){
+  $("profileError").textContent = "";
+  let mine = allPlayers().find(p => p.id === myId());
+  if (!mine && !isTrial() && db && me){ try { const s = await db.doc("players/"+me).get(); if (s.exists) mine = { id:me, ...s.data() }; } catch(_){} }
+  $("nameInput").value = mine?.name || "";
+  photoData = mine?.photo || null;
+  paintPreview();
+  $("toWallBtn").hidden = !mine && !isTrial();
+  if (!isTrial() && memberKind !== "player" && !isOwner) $("profileError").textContent = "Enter the player code on the first screen to take a seat.";
+  show("profile");
+}
+function paintPreview(){
+  const c = $("previewCanvas");
+  c.innerHTML = photoData
+    ? `<img alt="Your portrait" src="${photoData}"><div class="vignette"></div>`
+    : `<span class="initials">${initials($("nameInput").value)}</span><div class="vignette"></div>`;
+}
+$("nameInput").addEventListener("input", ()=> { if (!photoData) paintPreview(); });
+$("photoInput").addEventListener("change", async e => {
+  const f = e.target.files?.[0]; if (!f) return;
+  $("profileError").textContent = "";
+  try { photoData = await toPortrait(f); paintPreview(); }
+  catch(_){ $("profileError").textContent = "That file couldn't be read as a photo. Try a JPG or PNG."; }
+  e.target.value = "";
+});
+function toPortrait(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const W = 360, H = 480, cv = document.createElement("canvas");
+      cv.width = W; cv.height = H;
+      const r = Math.max(W/img.width, H/img.height);
+      const w = img.width*r, h = img.height*r;
+      const ctx = cv.getContext("2d");
+      ctx.drawImage(img, (W-w)/2, (H-h)/2.6, w, h);
+      URL.revokeObjectURL(url);
+      res(cv.toDataURL("image/jpeg", 0.8));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(); };
+    img.src = url;
+  });
+}
+$("profileForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const name = $("nameInput").value.trim().replace(/\s+/g," ");
+  if (!name){ $("profileError").textContent = "Enter the name you want on your plaque."; return; }
+  if (!photoData){ $("profileError").textContent = "Choose a portrait photo first. Tap the frame to pick one."; return; }
+  if (gameState().started && !allPlayers().some(p => p.id === myId())){
+    $("profileError").textContent = "The game has already started, so new players can't join this round. Ask the host about the next one.";
+    return;
+  }
+  if (isTrial()){
+    const existing = trialPlayers.find(p => p.id === TRIAL_ME);
+    if (existing){ existing.name = name; existing.photo = photoData; }
+    else trialPlayers.push({ id: TRIAL_ME, name, photo: photoData, joinedAt: Date.now() });
+    saveTrial(); setTrialView("player"); show("wallView"); toast("Your trial portrait is on the wall");
+    return;
+  }
+  if (!me){ $("profileError").textContent = "The castle can't be reached right now. Reload the page and try again."; return; }
+  const btn = $("saveBtn"); btn.disabled = true; btn.textContent = "Hanging…";
+  try {
+    const existing = players.find(p => p.id === me);
+    await db.doc("players/"+me).set({ name, photo: photoData, joinedAt: existing?.joinedAt || Date.now() });
+    show("wallView"); renderWall(); toast("Your portrait is on the wall");
+  } catch(err){
+    $("profileError").textContent = err?.code === "permission-denied"
+      ? "Your portrait couldn't be saved. Go back and enter the player code again."
+      : "Your portrait couldn't be saved just now. Check your connection and try again.";
+  } finally { btn.disabled = false; btn.textContent = "Hang my portrait"; }
+});
+$("toWallBtn").addEventListener("click", ()=> show("wallView"));
+$("editMeBtn").addEventListener("click", openProfile);
+$("leaveBtn").addEventListener("click", ()=> {
+  store.del("traitors.role"); role = null; setScreenMode(false); $("hostPanel").hidden = true; $("trialPanel").hidden = true; show("gate");
+});
+
+/* ---------- wall ---------- */
+function renderWall(){
+  renderGameBar();
+  renderVote(false);
+  renderTurret(false);
+  renderPowers(false);
+  renderFire(false);
+  renderPlainStage();
+  renderChain(false);
+  const wall = $("wall");
+  if (isScreenView() && murderActive()){ delete wall.dataset.chround; renderMurderWall(wall); applyScreenLayout(); return; }
+  delete wall.dataset.mround;
+  if (isScreenView() && chainLive()){ renderChainWall(wall); applyScreenLayout(); return; }
+  delete wall.dataset.chround;
+  const players = allPlayers(), statuses = allStatus(), me = myId();
+  let nIn=0,nBan=0,nMur=0;
+  players.forEach(p => { const s = statuses[p.id]; if (s==="banished") nBan++; else if (s==="murdered") nMur++; else nIn++; });
+  $("tIn").textContent = nIn; $("tBan").textContent = nBan; $("tMur").textContent = nMur;
+  if (!players.length){
+    wall.innerHTML = isTrial()
+      ? `<div class="empty"><div class="display" style="font-size:1.6rem">The trial wall stands empty</div>
+      <p class="muted">Add a player above, add 8 sample players at once, or join as a player to try the sign-up screen.</p></div>`
+      : `<div class="empty"><div class="display" style="font-size:1.6rem">The wall stands empty</div>
+      <p class="muted">Portraits appear here as players enter the player code, add their name and choose a photo.</p></div>`;
+    applyScreenLayout();
+    return;
+  }
+  const host = role === "host" || (isTrial() && trialView === "host");
+  const showYou = role === "player" || (isTrial() && trialView === "player");
+  wall.innerHTML = "";
+  const ordered = players.filter(p => !statuses[p.id]).concat(players.filter(p => statuses[p.id]));
+  ordered.forEach((p,i) => {
+    const s = statuses[p.id];
+    const card = document.createElement("article");
+    card.className = "card" + (s ? " out" : "");
+    card.style.animationDelay = Math.min(i*40,600)+"ms";
+    const frame = document.createElement("div"); frame.className = "portrait";
+    const canvas = document.createElement("div"); canvas.className = "canvas";
+    if (p.photo && /^data:image\/jpeg;base64,/.test(p.photo)){
+      const img = document.createElement("img"); img.src = p.photo; img.alt = "Portrait of " + (p.name||"a player"); canvas.appendChild(img);
+    } else { const sp = document.createElement("span"); sp.className="initials"; sp.textContent = initials(p.name); canvas.appendChild(sp); }
+    canvas.insertAdjacentHTML("beforeend",'<div class="vignette"></div>');
+    if (s){ const st = document.createElement("div"); st.className="stamp"; st.textContent = s==="murdered"?"MURDERED":"BANISHED"; canvas.appendChild(st); }
+    frame.appendChild(canvas);
+    if (p.id === me && showYou){ const y=document.createElement("span"); y.className="you-tag"; y.textContent="YOU"; frame.appendChild(y); }
+    const plaque = document.createElement("div"); plaque.className="plaque"; plaque.textContent = p.name || "Unnamed";
+    card.append(frame, plaque);
+    const pub = revealedRole(p.id), r = roleMap()[p.id];
+    let tagRole = null, tagText = "";
+    if (pub){ tagRole = pub; tagText = pub === "traitor" ? "TRAITOR" : "FAITHFUL"; }
+    else if (host && gameState().started && r && !hideRoles){ tagRole = r; tagText = r === "traitor" ? "TRAITOR" : "FAITHFUL"; }
+    else if (showYou && revealed && ownRole() === "traitor" && allyIds().includes(p.id)){ tagRole = "traitor"; tagText = "FELLOW TRAITOR"; }
+    if (tagRole){
+      const tag = document.createElement("span");
+      tag.className = "role-tag" + (tagRole === "traitor" ? " traitor" : "");
+      tag.textContent = tagText;
+      card.appendChild(tag);
+    }
+    if (host && gameState().started && hasShield(p.id)){
+      const sh = document.createElement("span"); sh.className = "role-tag shield"; sh.textContent = "SHIELD"; card.appendChild(sh);
+    }
+    if (host && gameState().started && hasDagger(p.id)){
+      const dt = document.createElement("span"); dt.className = "role-tag dagger"; dt.textContent = "DAGGER"; card.appendChild(dt);
+    }
+    if (host) card.appendChild(hostControls(p, s));
+    wall.appendChild(card);
+  });
+  applyScreenLayout();
+}
+function hostControls(p, s){
+  const box = document.createElement("div"); box.className = "controls";
+  if (pendingRemove === p.id){
+    box.innerHTML = `<div class="confirm">Take ${escapeHtml(p.name||"this player")} off the wall?</div>`;
+    const yes = btn("Remove","danger",()=> removePlayer(p.id));
+    const no = btn("Keep","",()=>{ pendingRemove=null; renderWall(); });
+    box.append(yes,no); return box;
+  }
+  const mk = (label, state) => { const b = btn(label,"",()=> setStatus(p.id, s===state?null:state)); b.setAttribute("aria-pressed", s===state?"true":"false"); return b; };
+  const rm = btn("Remove","danger",()=>{ pendingRemove=p.id; renderWall(); });
+  if (gameState().started) box.append(mk("Banish","banished"), mk("Murder","murdered"), rm);
+  else box.append(rm);
+  return box;
+}
+function btn(label, cls, fn){ const b=document.createElement("button"); b.type="button"; b.className="btn small "+cls; b.textContent=label; b.addEventListener("click",fn); return b; }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function setStatus(id, state, opts){
+  const hide = !!(opts && opts.hideRole);
+  if (isTrial()){
+    trialGame.hidden = trialGame.hidden || {};
+    if (state) trialStatus[id] = state; else delete trialStatus[id];
+    if (state && hide) trialGame.hidden[id] = true; else delete trialGame.hidden[id];
+    saveTrial(); renderWall(); return;
+  }
+  try {
+    if (state) await db.doc("status/"+id).set({ state, role: hide ? null : (roles[id] || null), at: Date.now() });
+    else await db.doc("status/"+id).delete();
+  } catch(_){ toast("That change didn't save. Try again."); }
+}
+async function revealRole(id){
+  if (isTrial()){ if (trialGame.hidden) delete trialGame.hidden[id]; saveTrial(); renderWall(); return; }
+  try { await db.doc("status/"+id).update({ role: roles[id] || null }); }
+  catch(_){ toast("The role couldn't be revealed. Try again."); }
+}
+async function removePlayer(id){
+  pendingRemove = null;
+  if (isTrial()){
+    trialPlayers = trialPlayers.filter(p => p.id !== id); delete trialStatus[id]; delete trialGame.roles[id];
+    saveTrial(); setTrialView(trialView); toast("Player removed"); return;
+  }
+  try { await db.doc("players/"+id).delete(); await db.doc("status/"+id).delete().catch(()=>{}); await db.doc("roles/"+id).delete().catch(()=>{}); toast("Player removed"); }
+  catch(_){ toast("That player couldn't be removed. Try again."); renderWall(); }
+}
+$("codesForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const h = norm($("hostCode").value), pl = norm($("playerCode").value), tr = norm($("trialCode").value), sc = norm($("screenCode").value);
+  if (!h || !pl || !tr || !sc){ toast("All four codes need a value"); return; }
+  if (new Set([h,pl,tr,sc]).size < 4){ toast("Each code must be different"); return; }
+  try { await db.doc("private/codes").set({ host:h, player:pl, trial:tr, screen:sc, owner: me }); await db.doc("settings/public").set({ player: pl }); codes = { host:h, player:pl, trial:tr, screen:sc }; $("hostCode").value=h; $("playerCode").value=pl; $("trialCode").value=tr; $("screenCode").value=sc; toast("Codes saved"); }
+  catch(_){ toast("Codes didn't save. Try again."); }
+});
+$("resetStatusBtn").addEventListener("click", ()=> { $("resetConfirm").hidden = false; });
+$("resetNo").addEventListener("click", ()=> { $("resetConfirm").hidden = true; });
+$("resetYes").addEventListener("click", async ()=> {
+  $("resetConfirm").hidden = true;
+  if (isTrial()){ trialStatus = {}; trialGame.hidden = {}; saveTrial(); renderWall(); toast("Everyone is back in the game"); return; }
+  try { await Promise.all(Object.keys(statuses).map(id => db.doc("status/"+id).delete())); toast("Everyone is back in the game"); }
+  catch(_){ toast("Some players couldn't be reset. Try again."); }
+});
+
+/* ---------- revealed roles and fellow traitors ---------- */
+function revealedRole(id){
+  const fp = fireState();
+  if (fp && fp.phase === "finale" && fp.roles && fp.roles[id]) return fp.roles[id];
+  if (isTrial()) return trialStatus[id] && !(trialGame.hidden || {})[id] ? (trialGame.roles[id] || null) : null;
+  return statuses[id] ? (statusRoles[id] || null) : null;
+}
+function allyIds(){
+  if (isTrial()){ const R = trialGame.roles; return R[TRIAL_ME] === "traitor" ? Object.keys(R).filter(k => k !== TRIAL_ME && R[k] === "traitor") : []; }
+  return myAllies;
+}
+function nameOf(id){ return (allPlayers().find(p => p.id === id) || {}).name || "A departed player"; }
+function allyLine(){
+  const a = allyIds();
+  if (!a.length) return "You are the only Traitor.";
+  return "Your fellow " + (a.length > 1 ? "Traitors are " : "Traitor is ") + a.map(id => escapeHtml(nameOf(id))).join(" and ") + ".";
+}
+
+/* ---------- the Round Table vote ---------- */
+// Flow: open (30s, players pick on phones) -> reveal (screen prompts each voter in turn;
+// they tap "Reveal vote" on their phone; the vote shows for 5s) -> done (verdict, role) -> closed.
+// The host's page drives every transition; votes stay private until each is revealed.
+const VOTE_MS = 30000, SHOW_MS = 5000, GRACE_MS = 1500, ROLE_DELAY_MS = 2500, TRIAL_AUTO_MS = 1800;
+let trialVotes = {}, trialRevealReq = false, pickTarget = null, pickRound = null, stageKey = "", automating = false, myVoteSaving = false;
+
+const isHostView = () => role === "host" || (isTrial() && trialView === "host");
+const isPlayerView = () => role === "player" || (isTrial() && trialView === "player");
+const isScreenView = () => role === "screen" || (isTrial() && trialView === "screen");
+const currentVote = () => isTrial() ? (trialGame.vote || null) : liveVote;
+const voteBusy = () => { const v = currentVote(); return !!v && (v.phase === "open" || v.phase === "reveal"); };
+const voteOnStage = () => { const v = currentVote(); return !!v && gameState().started && ["open","reveal","done"].includes(v.phase); };
+function livingIds(){
+  const S = allStatus(), R = roleMap(), started = gameState().started;
+  const knowsRoles = Object.keys(R).length > 0;
+  return allPlayers().filter(p => !S[p.id] && (!started || !knowsRoles || R[p.id])).map(p => p.id);
+}
+async function putVote(v){
+  if (isTrial()){ trialGame.vote = v; saveTrial(); renderWall(); return; }
+  await db.doc("game/vote").set(v);
+}
+async function startVote(opts){
+  if (voteBusy()) return;
+  const voters = livingIds();
+  const revote = !!(opts && opts.candidates);
+  if (voters.length < (revote ? 2 : (opts && opts.endgame ? 2 : 3))){ toast("A vote needs at least 3 players still in the game"); return; }
+  const now = Date.now();
+  pickTarget = null; trialVotes = {}; trialDaggerVote = false; daggerOn = false; trialRevealReq = false;
+  const extra = { ...(revote ? { candidates: opts.candidates, isRevote: true } : {}), ...(opts && opts.endgame ? { endgame: true } : {}) };
+  try { await putVote({ round: (currentVote()?.round || 0) + 1, phase:"open", startedAt: now, endsAt: now + VOTE_MS, voters, ...extra }); toast(revote ? "The revote is open" : "The vote is open"); }
+  catch(_){ toast("The vote couldn't start. Try again."); }
+}
+function myVoteTarget(v){
+  if (isTrial()) return trialVotes[TRIAL_ME] || null;
+  return myLiveVote && myLiveVote.round === v.round ? myLiveVote.target : null;
+}
+let daggerOn = false, trialDaggerVote = false;
+const canUseDagger = v => !!v && !v.endgame && myHasDagger();
+function myVoteDagger(v){
+  if (isTrial()) return !!trialVotes[TRIAL_ME] && trialDaggerVote;
+  return !!(myLiveVote && myLiveVote.round === v.round && myLiveVote.dagger);
+}
+async function submitVote(target){
+  const v = currentVote(); if (!v || v.phase !== "open" || Date.now() > v.endsAt) return;
+  const dagger = daggerOn && canUseDagger(v);
+  const msg = "Vote cast for " + nameOf(target) + (dagger ? ", with the Dagger" : "");
+  if (isTrial()){ trialVotes[TRIAL_ME] = target; trialDaggerVote = dagger; renderVote(true); toast(msg); return; }
+  myVoteSaving = true; renderVote(true);
+  try { await db.doc("votes/"+me).set({ round: v.round, target, dagger, at: Date.now() }); toast(msg); }
+  catch(_){ toast("Your vote didn't go through. Try again."); }
+  finally { myVoteSaving = false; renderVote(true); }
+}
+async function requestReveal(){
+  const v = currentVote(); if (!v || v.phase !== "reveal") return;
+  if (isTrial()){ trialRevealReq = true; renderVote(true); return; }
+  myVoteSaving = true; renderVote(true);
+  try { await db.doc("votes/"+me).set({ round: v.round, target: myVoteTarget(v), revealed: true, at: Date.now() }); }
+  catch(_){ toast("That didn't go through. Tap Reveal vote again."); }
+  finally { myVoteSaving = false; renderVote(true); }
+}
+function votesIn(v){
+  if (isTrial()) return v.voters.filter(id => trialVotes[id]).length;
+  return v.voters.filter(id => liveVotes[id] && liveVotes[id].round === v.round && liveVotes[id].target).length;
+}
+
+// Host-only memory of the locked votes (owner-only path, so players never read it).
+let lockedVotes = null;
+async function lockVotes(v){
+  const allowed = v.candidates || v.voters;
+  const pickRandom = voter => { const opts = allowed.filter(x => x !== voter); return opts[Math.floor(Math.random() * opts.length)] || null; };
+  const targets = {}, daggers = {};
+  v.voters.forEach(voter => {
+    let t = null, d = false;
+    if (isTrial()){
+      if (voter === TRIAL_ME){ t = trialVotes[voter] || null; d = trialDaggerVote; }
+      else { t = pickRandom(voter); d = Math.random() < 0.35; }
+    } else if (liveVotes[voter] && liveVotes[voter].round === v.round){ t = liveVotes[voter].target || null; d = !!liveVotes[voter].dagger; }
+    if (!allowed.includes(t) || t === voter) t = null;
+    targets[voter] = t;
+    // The dagger only counts for a real holder, with a real vote, outside the Fire Pit.
+    if (t && d && !v.endgame && hasDagger(voter)) daggers[voter] = true;
+  });
+  lockedVotes = { round: v.round, targets, daggers };
+  if (isTrial()) trialGame.locked = lockedVotes;
+  else await db.doc("votes/_locked").set(lockedVotes);
+}
+function getLocked(v){
+  if (isTrial()) return trialGame.locked && trialGame.locked.round === v.round ? trialGame.locked.targets : null;
+  if (lockedVotes && lockedVotes.round === v.round) return lockedVotes.targets;
+  const d = liveVotes["_locked"];
+  return d && d.round === v.round ? d.targets : null;
+}
+async function closeVote(v){
+  await lockVotes(v);
+  trialRevealReq = false;
+  await putVote({ ...v, phase:"reveal", order: shuffle(v.voters.slice()), step: 0, promptAt: Date.now(), shownAt: null, revealed: [] });
+}
+function voterPressedReveal(v, voter){
+  if (isTrial()) return voter === TRIAL_ME ? trialRevealReq : Date.now() >= v.promptAt + TRIAL_AUTO_MS;
+  const d = liveVotes[voter];
+  return !!(d && d.round === v.round && d.revealed);
+}
+function getLockedDaggers(v){
+  if (isTrial()) return trialGame.locked && trialGame.locked.round === v.round ? (trialGame.locked.daggers || {}) : {};
+  if (lockedVotes && lockedVotes.round === v.round) return lockedVotes.daggers || {};
+  const d = liveVotes["_locked"];
+  return d && d.round === v.round ? (d.daggers || {}) : {};
+}
+async function showCurrent(v, locked){
+  const voter = v.order[v.step];
+  const weight = locked[voter] && getLockedDaggers(v)[voter] ? 2 : 1;
+  const revealed = v.revealed.concat([{ voter, target: locked[voter] || null, weight }]);
+  await putVote({ ...v, revealed, shownAt: Date.now() });
+}
+async function finishVote(v){
+  const counts = {}; v.revealed.forEach(r => { if (r.target) counts[r.target] = (counts[r.target] || 0) + (r.weight || 1); });
+  const max = Math.max(0, ...Object.values(counts));
+  const leaders = Object.keys(counts).filter(k => counts[k] === max);
+  let outcome = !max ? { type:"none" } : leaders.length === 1 ? { type:"banish", id: leaders[0], votes: max } : { type:"tie", ids: leaders, votes: max };
+  if (v.isRevote && outcome.type !== "banish"){
+    // A second tie: the tied players are safe and fate picks someone else.
+    const safe = outcome.type === "tie" ? leaders : (v.candidates || []);
+    const pool = v.voters.filter(id => !safe.includes(id));
+    const from = pool.length ? pool : v.voters;
+    outcome = { type:"banish", id: from[Math.floor(Math.random() * from.length)], votes: 0, random: true, safe };
+  }
+  await putVote({ ...v, phase:"done", counts, outcome, doneAt: Date.now() });
+  if (outcome.type === "banish") await setStatus(outcome.id, "banished", { hideRole:true });
+  await tickDaggers(v);
+}
+// After each banishment vote: a dagger that was used is spent; otherwise it counts down.
+// Revotes and Fire Pit votes don't count toward the three.
+async function tickDaggers(v){
+  const P = powersMap();
+  await Promise.all(Object.keys(P).filter(id => P[id].dagger).map(id => {
+    const used = v.revealed.some(r => r.voter === id && r.weight === 2);
+    if (used) return setPower(id, { ...P[id], dagger: false, daggerUsed: true });
+    if (v.isRevote || v.endgame) return null;
+    const seen = (P[id].daggerSeen || 0) + 1;
+    return setPower(id, { ...P[id], daggerSeen: seen, dagger: seen < DAGGER_VOTES, daggerExpired: seen >= DAGGER_VOTES });
+  }));
+}
+async function hostAutomation(){
+  if (automating || !(role === "host" || isTrial())) return;
+  const v = currentVote(); if (!v) return;
+  const now = Date.now();
+  automating = true;
+  try {
+    if (v.phase === "open" && now >= v.endsAt + GRACE_MS){ await closeVote(v); }
+    else if (v.phase === "reveal"){
+      const locked = getLocked(v);
+      if (!locked){ await lockVotes(v); }
+      else if (v.step >= v.order.length){ await finishVote(v); }
+      else if (!v.shownAt){
+        const voter = v.order[v.step];
+        // A player who didn't vote is announced straight away; otherwise wait for their tap.
+        if (!locked[voter] || voterPressedReveal(v, voter)) await showCurrent(v, locked);
+      } else if (now >= v.shownAt + SHOW_MS){
+        trialRevealReq = false;
+        const step = v.step + 1;
+        if (step >= v.order.length) await finishVote({ ...v, step });
+        else await putVote({ ...v, step, promptAt: now, shownAt: null });
+      }
+    }
+  } catch(_){ /* retried on the next tick */ }
+  finally { automating = false; }
+}
+async function forceReveal(){
+  const v = currentVote(); if (!v || v.phase !== "reveal" || v.shownAt) return;
+  const locked = getLocked(v); if (!locked) return;
+  try { await showCurrent(v, locked); } catch(_){ toast("That reveal didn't go through. Try again."); }
+}
+async function decideTie(id){
+  const v = currentVote(); if (!v) return;
+  try { await setStatus(id, "banished", { hideRole:true }); await putVote({ ...v, outcome:{ type:"banish", id, votes: v.outcome.votes, decided:true }, doneAt: Date.now() }); }
+  catch(_){ toast("That banishment didn't save. Try again."); }
+}
+
+function fmtClock(ms){ const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+function photoOf(id){ const p = allPlayers().find(x => x.id === id); return p && p.photo && /^data:image\/jpeg;base64,/.test(p.photo) ? p.photo : null; }
+function portraitThumb(id){ const ph = photoOf(id); return ph ? `<img alt="" src="${ph}">` : `<span class="ph"></span>`; }
+function bigPortrait(id, extra){
+  const ph = photoOf(id);
+  return `<div class="portrait stage-portrait ${extra || ""}"><div class="canvas">${ph ? `<img alt="" src="${ph}">` : `<span class="initials">${escapeHtml(initials(nameOf(id)))}</span>`}<div class="vignette"></div></div></div>`;
+}
+function talliesHtml(revealed){
+  const counts = {}; revealed.forEach(r => { if (r.target) counts[r.target] = (counts[r.target] || 0) + (r.weight || 1); });
+  const rows = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  return rows.length ? `<div class="tallies">${rows.map(([id, c]) => `<span>${escapeHtml(nameOf(id))} · ${c}</span>`).join("")}</div>` : "";
+}
+function verdictHtml(v, showRole){
+  const o = v.outcome;
+  if (o.type === "none") return `<div class="verdict">No votes were cast. Nobody is banished.</div>`;
+  if (o.type === "tie" && !o.decided){
+    const names = o.ids.map(id => escapeHtml(nameOf(id))).join(" and ");
+    return `<div class="verdict">It's a tie between ${names}, with ${o.votes} vote${o.votes > 1 ? "s" : ""} each.</div><p class="muted" style="margin:0">The host may call a revote between them.</p>`;
+  }
+  const name = escapeHtml(nameOf(o.id));
+  let html = o.random
+    ? `<div class="verdict">Another tie. ${o.safe.map(id => escapeHtml(nameOf(id))).join(" and ")} ${o.safe.length > 1 ? "are" : "is"} safe.</div><div class="verdict">Fate has chosen ${name} to be banished instead.</div>`
+    : `<div class="verdict">${o.decided ? `The host has broken the tie. ${name} is banished.` : `With ${o.votes} vote${o.votes > 1 ? "s" : ""}, ${name} has been banished.`}</div>`;
+  if (v.endgame){
+    const r = revealedRole(o.id);
+    html += r ? `<div class="verdict role-${r}">${name} was… ${r === "traitor" ? "a Traitor" : "Faithful"}.</div>`
+      : `<p class="muted" style="margin:0">This is the endgame. ${name}'s role stays secret until the very end.</p>`;
+  } else if (showRole){
+    const r = revealedRole(o.id);
+    if (r) html += `<div class="verdict role-${r}">${name} was… ${r === "traitor" ? "a Traitor" : "Faithful"}.</div>`;
+    else html += `<p class="muted" style="margin:0">${name}, before you leave the castle, the host will reveal your role.</p>`;
+  }
+  return html;
+}
+
+function renderVote(force){
+  const stage = $("voteStage");
+  const v = currentVote();
+  const host = isHostView(), player = isPlayerView(), screen = isScreenView();
+  if (!voteOnStage() || murderActive() || (!host && !player && !screen)){ stage.hidden = true; if (stageKey){ stageKey = ""; applyScreenLayout(); } return; }
+  const wasHidden = stage.hidden;
+  stage.hidden = false;
+  if (wasHidden) applyScreenLayout();
+  const now = Date.now();
+  const myId_ = myId();
+  const kick = `<span class="kicker">Round Table · Vote ${v.round}</span>`;
+  if (v.round !== pickRound){ pickRound = v.round; pickTarget = null; daggerOn = false; }
+
+  /* ----- voting ----- */
+  if (v.phase === "open"){
+    const left = v.endsAt - now;
+    const canVote = player && v.voters.includes(myId_);
+    const mine = myVoteTarget(v);
+    const mineDagger = myVoteDagger(v), daggerAvail = canVote && canUseDagger(v);
+    const key = ["open", v.round, left > 0, mine, mineDagger, daggerOn, daggerAvail, pickTarget, myVoteSaving, host ? votesIn(v) : "", canVote, screen].join("|");
+    if (key !== stageKey || force){
+      stageKey = key;
+      let body = "";
+      if (left <= 0){
+        body = `<p class="muted" style="margin:0">Time's up. ${screen ? "Get ready to reveal your votes." : player && !host ? "Watch the community screen. When it calls your name, reveal your vote here." : "Locking in the votes…"}</p>`;
+      } else if (screen){
+        body = `<p class="stage-lede">${v.isRevote ? `Revote: choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}. If it ties again, both are safe and fate picks someone else.` : "Players, cast your vote on your phone. Who do you believe is a Traitor?"}</p>`;
+      } else if (host){
+        body = `<p style="margin:0">${votesIn(v)} of ${v.voters.length} votes are in.</p>
+          <div class="acts"><button class="btn small" type="button" data-vote="close">Close voting now</button></div>`;
+      } else if (!canVote){
+        body = `<p class="muted" style="margin:0">${isTrial() && !trialPlayers.some(p => p.id === TRIAL_ME)
+          ? "Use “Join as a player” in the trial panel to take part in the vote."
+          : "You're no longer in the game, so you can watch but not vote."}</p>`;
+      } else {
+        const sel = pickTarget || mine;
+        body = `<p style="margin:0">${mine ? `Your vote for <b>${escapeHtml(nameOf(mine))}</b>${mineDagger ? " (with the Dagger)" : ""} is in. You can change it until time runs out.` : (v.isRevote ? `It's a revote. Choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}.` : "Who do you think is a Traitor? Choose one player.")}</p>
+          <div class="choices">${(v.candidates || v.voters).filter(id => id !== myId_).map(id =>
+            `<button class="choice" type="button" data-pick="${escapeHtml(id)}" aria-pressed="${sel === id}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}</span></button>`).join("")}</div>
+          ${daggerAvail ? `<div class="dagger-box"><button class="btn small ${daggerOn ? "solid" : ""}" type="button" data-vote="dagger" aria-pressed="${daggerOn}">${daggerOn ? "Dagger drawn: your vote counts twice" : "Use the Dagger on this vote"}</button><span class="muted">You can only use it once. Everyone will see it at the reveal.</span></div>` : ""}
+          <div class="acts"><button class="btn solid" type="button" data-vote="submit" ${(sel && (sel !== mine || (daggerAvail && daggerOn !== mineDagger))) && !myVoteSaving ? "" : "disabled"}>${myVoteSaving ? "Sending…" : mine ? "Change my vote" : "Submit vote"}</button></div>`;
+      }
+      stage.innerHTML = `${kick}<h3>${v.isRevote ? "Revote" : "Cast your vote"}</h3><div class="clock" id="voteClock"></div>${body}`;
+    }
+    const c = $("voteClock");
+    if (c){ c.textContent = fmtClock(left); c.classList.toggle("low", left <= 10000); }
+    return;
+  }
+
+  /* ----- one-by-one reveal ----- */
+  if (v.phase === "reveal"){
+    const total = v.order.length;
+    const step = Math.min(v.step, total - 1);
+    const voter = v.order[step];
+    const shown = !!v.shownAt && v.revealed.length > step;
+    const cur = shown ? v.revealed[step] : null;
+    const isMe = player && voter === myId_;
+    const meDone = player && v.revealed.some(r => r.voter === myId_);
+    const waitingTap = isTrial() ? trialRevealReq : !!(myLiveVote && myLiveVote.round === v.round && myLiveVote.revealed);
+    const key = ["rev", v.round, step, shown, isMe, meDone, myVoteSaving, waitingTap, host, screen, player].join("|");
+    if (key === stageKey && !force) return;
+    stageKey = key;
+    const progress = `<p class="muted step-count">Vote ${step + 1} of ${total}</p>`;
+
+    if (player && !host && !screen){
+      if (isMe && !shown){
+        stage.innerHTML = `${kick}<h3>It's your turn</h3><p style="margin:0">Everyone is watching the community screen. Reveal who you voted for.</p>
+          <div class="acts"><button class="btn solid big-btn" type="button" data-vote="reveal" ${myVoteSaving || waitingTap ? "disabled" : ""}>${myVoteSaving || waitingTap ? "Revealing…" : "Reveal vote"}</button></div>`;
+      } else if (isMe && shown){
+        stage.innerHTML = `${kick}<h3>Your vote is on the screen</h3><p class="muted" style="margin:0">You voted for ${cur.target ? `<b>${escapeHtml(nameOf(cur.target))}</b>` : "nobody"}.</p>`;
+      } else {
+        stage.innerHTML = `${kick}<h3>Eyes on the community screen</h3><p class="muted" style="margin:0">${escapeHtml(nameOf(voter))} is ${shown ? "revealing" : "about to reveal"} their vote.${meDone ? " Your vote has been revealed." : v.voters.includes(myId_) ? " Wait for your name to be called." : ""}</p>`;
+      }
+      return;
+    }
+
+    let main;
+    if (!shown){
+      main = `<div class="reveal-row">${bigPortrait(voter)}<div class="reveal-text">
+          <div class="reveal-call">${escapeHtml(nameOf(voter))},</div>
+          <div class="reveal-sub">reveal your vote</div>
+          <p class="muted" style="margin:0">Tap <b>Reveal vote</b> on your phone.${isTrial() && voter === TRIAL_ME && !host ? " (In trial, switch to Player view to tap it.)" : ""}</p>
+        </div></div>`;
+    } else if (cur.target){
+      main = `<div class="reveal-row">${bigPortrait(voter)}<div class="reveal-text">
+          <div class="reveal-sub">${escapeHtml(nameOf(voter))} has voted for…</div>
+          <div class="reveal-target"><span class="reveal-call">${escapeHtml(nameOf(cur.target))}</span></div>
+          ${cur.weight === 2 ? `<div class="reveal-target dagger-note">${escapeHtml(nameOf(voter))} drew the Dagger. This vote counts twice.</div>` : ""}
+        </div><div class="reveal-target">${bigPortrait(cur.target, "target-portrait")}</div></div>`;
+    } else {
+      main = `<div class="reveal-row">${bigPortrait(voter)}<div class="reveal-text"><div class="reveal-sub">${escapeHtml(nameOf(voter))} did not vote.</div></div></div>`;
+    }
+    const hostActs = host && !shown
+      ? `<div class="acts"><button class="btn small" type="button" data-vote="force">Reveal for ${escapeHtml(nameOf(voter))}</button></div>` : "";
+    stage.innerHTML = `${kick}${progress}${main}${talliesHtml(v.revealed)}${hostActs}`;
+    fitNames(stage);
+    return;
+  }
+
+  /* ----- verdict ----- */
+  const roleTime = true;
+  const roleKnown = v.outcome.type === "banish" ? !!revealedRole(v.outcome.id) : false;
+  const key = ["done", v.round, roleTime, roleKnown, JSON.stringify(v.outcome), host, screen, player].join("|");
+  if (key === stageKey && !force) return;
+  stageKey = key;
+  const banishedPortrait = v.outcome.type === "banish" && (screen || host) ? bigPortrait(v.outcome.id, "verdict-portrait") : "";
+  let hostActs = "";
+  if (host){
+    const tieBtns = v.outcome.type === "tie" && !v.outcome.decided
+      ? `<button class="btn solid" type="button" data-vote="revote">Revote between ${v.outcome.ids.map(id => escapeHtml(nameOf(id))).join(" and ")}</button>` : "";
+    const revealBtn = v.outcome.type === "banish" && !roleKnown && !v.endgame
+      ? `<button class="btn solid" type="button" data-reveal-role="${escapeHtml(v.outcome.id)}">Reveal ${escapeHtml(nameOf(v.outcome.id))}'s role</button>` : "";
+    hostActs = `<div class="acts">${tieBtns}${revealBtn}<button class="btn small" type="button" data-vote="dismiss">Close the vote</button></div>`;
+  }
+  stage.innerHTML = `${kick}<h3>The castle has spoken</h3>${banishedPortrait}${verdictHtml(v, roleTime)}${talliesHtml(v.revealed || [])}${hostActs}`;
+}
+$("voteStage").addEventListener("click", e => {
+  const pick = e.target.closest("[data-pick]");
+  if (pick){ pickTarget = pick.dataset.pick; renderVote(true); return; }
+  const tie = e.target.closest("[data-tie]");
+  if (tie){ decideTie(tie.dataset.tie); return; }
+  const rr = e.target.closest("[data-reveal-role]");
+  if (rr){ revealRole(rr.dataset.revealRole); return; }
+  const a = e.target.closest("[data-vote]")?.dataset.vote;
+  const v = currentVote(); if (!a || !v) return;
+  if (a === "dagger"){ daggerOn = !daggerOn; renderVote(true); return; }
+  if (a === "submit" && (pickTarget || myVoteTarget(v))) submitVote(pickTarget || myVoteTarget(v));
+  else if (a === "reveal") requestReveal();
+  else if (a === "revote" && v.outcome && v.outcome.type === "tie") startVote({ candidates: v.outcome.ids, endgame: !!v.endgame });
+  else if (a === "force") forceReveal();
+  else if (a === "close") putVote({ ...v, endsAt: Date.now() - GRACE_MS }).catch(()=> toast("Voting couldn't be closed. Try again."));
+  else if (a === "dismiss") putVote({ ...v, phase:"closed" }).catch(()=> toast("The vote couldn't be closed. Try again."));
+});
+setInterval(() => { renderVote(false); hostAutomation(); }, 250);
+
+// Names never break across lines: shrink the type until the whole name fits on one line.
+function fitNames(root){
+  root.querySelectorAll(".reveal-call").forEach(el => {
+    el.style.fontSize = "";
+    let fs = parseFloat(getComputedStyle(el).fontSize) || 32;
+    let guard = 40;
+    while (el.scrollWidth > el.clientWidth + 1 && fs > 14 && guard--){ fs -= 2; el.style.fontSize = fs + "px"; }
+  });
+}
+/* ---------- community screen: fit the whole wall on one screen ---------- */
+function applyScreenLayout(){
+  const wall = $("wall"), head = $("wallHead");
+  const screen = isScreenView() && !$("wallView").hidden;
+  const staged = screen && (voteOnStage() || fireOnStage() || (gameState().started && plainAnnounced())) && !murderActive();
+  wall.hidden = staged; head.hidden = staged;
+  if (!screen){ wall.style.gridTemplateColumns = ""; wall.style.removeProperty("--fs"); return; }
+  if (staged) return;
+  const n = murderActive() ? Math.max(1, murderState().total) : chainLive() ? Math.max(1, chainState().total) : wall.querySelectorAll(".card").length;
+  if (!n){ wall.style.gridTemplateColumns = "1fr"; return; }
+  // Measure the space actually left on screen below the wall's top edge, so a wall whose
+  // box has grown with its contents can never trick the fit into one tall column.
+  const W = wall.clientWidth;
+  const top = wall.getBoundingClientRect().top;
+  const H = Math.min(wall.clientHeight || Infinity, window.innerHeight - top - 12);
+  if (!W || !(H > 0)) return;
+  const tags = murderActive() || (gameState().started && Object.keys(allStatus()).length > 0);
+  const g = 16;
+  const fsOf = w => Math.max(11, Math.min(20, w * 0.095));
+  const cardH = w => (w - 20) * 4 / 3 + 20 + 10 + (fsOf(w) * 1.2 + 12) + (tags ? 28 : 0);
+  let best = null;
+  for (let c = 1; c <= n; c++){
+    const rows = Math.ceil(n / c);
+    let w = Math.min(260, (W - (c - 1) * g) / c);
+    if (w < 24) break;
+    while (w > 30 && rows * cardH(w) + (rows - 1) * g > H) w -= 1;
+    const height = rows * cardH(w) + (rows - 1) * g;
+    const fits = height <= H;
+    // Prefer layouts that fit; among those, the biggest portraits. If none fit, the shortest.
+    if (!best || (fits && (!best.fits || w > best.w)) || (!fits && !best.fits && height < best.height)) best = { w, c, fits, height };
+  }
+  if (!best) best = { w: 30, c: n };
+  const w = Math.floor(best.w);
+  wall.style.gridTemplateColumns = `repeat(${best.c}, ${w}px)`;
+  wall.style.setProperty("--fs", fsOf(w).toFixed(1) + "px");
+}
+try { new ResizeObserver(() => applyScreenLayout()).observe(document.body); } catch(_){ window.addEventListener("resize", applyScreenLayout); }
+
+/* ---------- The Turret (secret) and the Breakfast reveal (public) ---------- */
+// Turret: host/turret holds the full state (host only). The host's page mirrors a
+// trimmed copy into turret/<traitorId> (each traitor reads only their own) and reads
+// the traitors' picks from tpicks/<traitorId>. Faithfuls and the screen read none of it.
+// Breakfast: host/plan holds the hidden order; game/murder only ever holds what has
+// already been revealed, so nobody can peek ahead.
+const FIRST_BATCH_MS = 3000, BATCH_MS = 8000, FINAL_MS = 12000, TRIAL_PICK_MS = 1500;
+let hostTurret = null, tpicks = {}, myTurret = null, myPick = null;
+let liveMurder = null, murderPlan = null;
+let trialPicks = {};
+const PLAIN_TASKS = [
+  "Record yourself taking a shot with your victim.",
+  "Write your victim's name on a cup with a heart, and get them to drink from it.",
+  "Take a selfie with your victim while they make a peace sign."
+];
+let livePlain = null;
+const plainAnnounced = () => isTrial() ? !!trialGame.plainAnnounce : !!(livePlain && livePlain.active);
+async function setPlainAnnounce(on){
+  if (isTrial()){ trialGame.plainAnnounce = on; saveTrial(); renderWall(); return; }
+  await db.doc("game/plain").set({ active: on, at: Date.now() });
+}
+function renderPlainStage(){
+  const show = isScreenView() && gameState().started && plainAnnounced() && !murderActive();
+  const st = $("plainStage");
+  if (st.hidden === show){ st.hidden = !show; applyScreenLayout(); }
+}
+let hostMips = null, plainSetup = false, plainSel = null, plainMinutes = 20;
+const mipsUsed = () => isTrial() ? !!trialGame.mipsUsed : !!(hostMips && hostMips.used);
+let turretSel = [], turretSelKey = "", turretSaving = false, turretBusy = false, turretKey = "", lastFanKey = "";
+
+const turretState = () => isTrial() ? (trialGame.turret || null) : hostTurret;
+const murderState = () => isTrial() ? (trialGame.murder || null) : liveMurder;
+const planState = () => isTrial() ? (trialGame.plan || null) : murderPlan;
+const picksMap = () => isTrial() ? trialPicks : tpicks;
+const turretActive = () => { const t = turretState(); return !!t && t.phase !== "closed"; };
+const murderActive = () => { const m = murderState(); return !!m && m.phase !== "closed" && gameState().started; };
+const turretOrMurderBusy = () => turretActive() || murderActive() || chainLive();
+
+// What a traitor's own phone sees (trial reads the full state directly).
+function myTurretView(){
+  if (isTrial()){
+    const t = trialGame.turret;
+    return t && t.traitors.includes(TRIAL_ME) ? { ...t, progress: turretProgress(t) } : null;
+  }
+  return myTurret;
+}
+function myPickView(){ return isTrial() ? (trialPicks[TRIAL_ME] || null) : myPick; }
+
+function turretProgress(t){
+  const P = picksMap();
+  const nominated = t.traitors.filter(id => P[id] && P[id].round === t.round && (P[id].noms || []).length).length;
+  const att = t.attempt || 1;
+  const voted = t.traitors.filter(id => P[id] && P[id].round === t.round && P[id].vote && (P[id].attempt || 1) === att).length;
+  return { nominated, voted, total: t.traitors.length };
+}
+async function setTurret(t){
+  if (isTrial()){ trialGame.turret = t; saveTrial(); renderWall(); return; }
+  await db.doc("host/turret").set(t);
+  await fanOut(t, true);
+}
+async function fanOut(t, force){
+  if (isTrial() || !t) return;
+  const progress = turretProgress(t);
+  const key = JSON.stringify([t.round, t.phase, t.attempt, t.shortlist, t.victim, t.tie, progress]);
+  if (!force && key === lastFanKey) return;
+  lastFanKey = key;
+  const view = { round: t.round, mode: t.mode || "murder", task: t.task || null, failed: !!t.failed, phase: t.phase, attempt: t.attempt || 1, candidates: t.candidates, shortlist: t.shortlist, victim: t.victim, tie: t.tie, firstTie: t.firstTie || null, randomPick: !!t.randomPick, progress };
+  await Promise.all(t.traitors.map(id => db.doc("turret/"+id).set(view)));
+}
+
+/* ----- recruitment ----- */
+// More than 10 players: the Traitors should number 3. 10 or fewer: 2.
+// When they fall short, the Turret recruits instead of murdering. Never with 6 or fewer left.
+function recruitDue(){
+  const R = roleMap(), living = livingIds();
+  const n = living.length, tr = living.filter(id => R[id] === "traitor").length;
+  if (n <= 6 || tr < 1) return false;
+  return tr < (n > 10 ? 3 : 2);
+}
+const ownRecruited = () => isTrial() ? ((trialGame.recruited || {})[TRIAL_ME] || null) : myRecruitedRound;
+async function applyRecruit(id, round){
+  if (isTrial()){
+    trialGame.roles[id] = "traitor";
+    trialGame.recruited = { ...(trialGame.recruited || {}), [id]: round };
+    if (id === TRIAL_ME) revealed = false;
+    saveTrial(); renderWall(); return;
+  }
+  const all = Object.keys(roles).filter(k => roles[k] === "traitor");
+  if (!all.includes(id)) all.push(id);
+  await Promise.all(all.map(tid => db.doc("roles/"+tid).set({ role:"traitor", allies: all.filter(x => x !== tid), ...(tid === id ? { recruitedRound: round } : {}) })));
+}
+
+/* ----- murder in plain sight ----- */
+async function startPlainSight(minutes){
+  if (mipsUsed() || turretOrMurderBusy() || voteBusy()) return;
+  const R = roleMap(), living = livingIds();
+  const traitors = living.filter(id => R[id] === "traitor");
+  const candidates = living.filter(id => R[id] === "faithful");
+  if (!traitors.length){ toast("There are no Traitors left in the game"); return; }
+  if (!candidates.length){ toast("There are no Faithful left to murder"); return; }
+  const mins = Math.max(1, Math.min(240, Math.round(minutes) || 20));
+  const now = Date.now();
+  const task = PLAIN_TASKS[Math.floor(Math.random() * PLAIN_TASKS.length)];
+  try {
+    if (isTrial()) trialGame.mipsUsed = true; else await db.doc("host/mips").set({ used: true, at: now });
+    await setTurret({ round: (turretState()?.round || 0) + 1, mode:"plain", phase:"task", phaseAt: now, task, deadline: now + mins * 60000, minutes: mins,
+      traitors, candidates, shortlist: [], victim: null, tie: null });
+    plainSetup = false; plainSel = null;
+    toast("The Traitors have their task");
+  } catch(_){ toast("The murder in plain sight couldn't start. Try again."); }
+}
+async function resolvePlain(victim){
+  const t = turretState(); if (!t || t.mode !== "plain") return;
+  try { await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), victim: victim || null, failed: !victim }); if (victim) await setPlainAnnounce(true); }
+  catch(_){ toast("That didn't save. Try again."); }
+}
+
+/* ----- host actions ----- */
+async function startTurret(){
+  if (turretOrMurderBusy() || voteBusy()) return;
+  const R = roleMap(), living = livingIds();
+  const traitors = living.filter(id => R[id] === "traitor");
+  const candidates = living.filter(id => R[id] === "faithful");
+  if (!traitors.length){ toast("There are no Traitors left in the game"); return; }
+  if (!candidates.length){ toast("There are no Faithful left to murder"); return; }
+  const mode = recruitDue() ? "recruit" : "murder";
+  trialPicks = {};
+  try {
+    await setTurret({ round: (turretState()?.round || 0) + 1, mode, phase:"nominate", phaseAt: Date.now(), traitors, candidates, shortlist: [], victim: null, tie: null });
+    toast(mode === "recruit" ? "Recruitment night: the Traitors will choose a new Traitor" : "The Traitors have been summoned to the Turret");
+  } catch(_){ toast("The Turret couldn't open. Try again."); }
+}
+function nominationsOf(t){
+  const P = picksMap(), out = [];
+  t.traitors.forEach(id => { const p = P[id]; if (p && p.round === t.round) (p.noms || []).forEach(n => { if (t.candidates.includes(n) && !out.includes(n)) out.push(n); }); });
+  return out;
+}
+async function closeNominations(t){
+  const shortlist = nominationsOf(t);
+  if (!shortlist.length){ toast("No one has been nominated yet"); return; }
+  if (shortlist.length === 1) await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), shortlist, victim: shortlist[0] });
+  else await setTurret({ ...t, phase:"vote", phaseAt: Date.now(), shortlist });
+}
+async function closeTurretVote(t){
+  const P = picksMap(), counts = {};
+  const att = t.attempt || 1;
+  t.traitors.forEach(id => { const p = P[id]; if (p && p.round === t.round && (p.attempt || 1) === att && t.shortlist.includes(p.vote)) counts[p.vote] = (counts[p.vote] || 0) + 1; });
+  const max = Math.max(0, ...Object.values(counts));
+  if (!max){ toast("No Traitor has voted yet"); return; }
+  const leaders = Object.keys(counts).filter(k => counts[k] === max);
+  if (leaders.length === 1) await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), victim: leaders[0], counts });
+  else if (att === 1) await setTurret({ ...t, phase:"vote", phaseAt: Date.now(), attempt: 2, shortlist: leaders, firstTie: leaders, counts });
+  else await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), victim: leaders[Math.floor(Math.random() * leaders.length)], randomPick: true, tie: leaders, counts });
+}
+async function pickVictim(id){
+  const t = turretState(); if (!t) return;
+  try { await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), victim: id, tie: null }); } catch(_){ toast("That didn't save. Try again."); }
+}
+async function cancelTurret(){
+  const t = turretState(); if (!t) return;
+  try { await setTurret({ ...t, phase:"closed" }); if (plainAnnounced()) await setPlainAnnounce(false); if (t.mode === "chain" && chainLive()) await putChain({ ...chainState(), phase:"closed" }); } catch(_){ toast("The Turret couldn't be closed. Try again."); }
+}
+function buildBatches(ids){
+  const out = []; let i = 0;
+  while (i < ids.length){
+    const rem = ids.length - i;
+    const size = rem <= 3 ? rem : rem === 4 ? 2 : (Math.random() < 0.5 ? 2 : 3);
+    out.push({ ids: ids.slice(i, i + size) }); i += size;
+  }
+  return out;
+}
+async function startMurder(){
+  const t = turretState(); if (!t || t.phase !== "chosen" || (!t.victim && !t.failed)) return;
+  const victim = t.victim;
+  const living = livingIds();
+  if (victim && !living.includes(victim)){ toast("That player is no longer in the game"); return; }
+  const recruit = t.mode === "recruit";
+  const failed = !victim;
+  const shielded = recruit || failed || hasShield(victim);
+  // A shield means nobody dies: everyone, the target included, is revealed as safe.
+  const chainPool = t.mode === "chain" && chainState() ? chainState().remaining.filter(id => living.includes(id)) : null;
+  const field = chainPool && (!victim || chainPool.includes(victim)) ? chainPool : living;
+  const pool = shielded ? shuffle(field.slice()) : shuffle(field.filter(id => id !== victim));
+  const finalCount = shielded ? 3 : 2;
+  const finalSafe = pool.slice(-finalCount), rest = pool.slice(0, Math.max(0, pool.length - finalCount));
+  // After a Safety Chain the unsafe players arrive one at a time before the final three.
+  const batches = field === chainPool ? rest.map(id => ({ ids: [id] })) : buildBatches(rest);
+  const now = Date.now();
+  const round = (murderState()?.round || 0) + 1;
+  const plan = { round, victim: shielded ? null : victim, saved: shielded && !recruit && !failed ? victim : null, recruit: recruit ? victim : null, batches, finalSafe };
+  const pub = { round, phase:"reveal", stage: batches.length ? "batches" : "suspense", startedAt: now,
+    nextAt: now + (batches.length ? FIRST_BATCH_MS : FINAL_MS), total: field.length, shown: [], final: null, plain: t.mode === "plain" };
+  try {
+    if (isTrial()){ trialGame.plan = plan; trialGame.murder = pub; trialGame.turret = { ...t, phase:"closed" }; trialGame.plainAnnounce = false;
+      if (trialGame.chain && t.mode === "chain") trialGame.chain = { ...trialGame.chain, phase:"closed", completed: true }; saveTrial(); renderWall(); }
+    else {
+      await db.doc("host/plan").set(plan);
+      murderPlan = plan;
+      await db.doc("game/murder").set(pub);
+      if (plainAnnounced()) await setPlainAnnounce(false);
+      if (chainLive()) await putChain({ ...chainState(), phase:"closed", completed: t.mode === "chain" });
+      await setTurret({ ...t, phase:"closed" });
+    }
+    toast("Breakfast is served");
+  } catch(_){ toast("The murder couldn't start. Try again."); }
+}
+async function putMurder(m){
+  if (isTrial()){ trialGame.murder = m; saveTrial(); renderWall(); return; }
+  await db.doc("game/murder").set(m);
+}
+async function endMurder(){
+  const m = murderState(); if (!m) return;
+  try { await putMurder({ ...m, phase:"closed" }); await expireShields(m.startedAt); } catch(_){ toast("The murder phase couldn't end. Try again."); }
+}
+
+/* ----- traitor actions ----- */
+async function submitNoms(){
+  const t = myTurretView(); if (!t || t.phase !== "nominate" || !turretSel.length) return;
+  const noms = turretSel.slice(0, 2);
+  if (isTrial()){ trialPicks[TRIAL_ME] = { round: t.round, noms, vote: null }; renderWall(); toast("Your picks are in"); return; }
+  turretSaving = true; renderTurret(true);
+  try { await db.doc("tpicks/"+me).set({ round: t.round, noms, vote: null }); toast("Your picks are in"); }
+  catch(_){ toast("Your picks didn't go through. Try again."); }
+  finally { turretSaving = false; renderTurret(true); }
+}
+async function submitTurretVote(){
+  const t = myTurretView(); if (!t || t.phase !== "vote" || turretSel.length !== 1) return;
+  const prev = myPickView();
+  const noms = prev && prev.round === t.round ? (prev.noms || []) : [];
+  const attempt = t.attempt || 1;
+  if (isTrial()){ trialPicks[TRIAL_ME] = { round: t.round, noms, vote: turretSel[0], attempt }; renderWall(); toast("Your vote is in"); return; }
+  turretSaving = true; renderTurret(true);
+  try { await db.doc("tpicks/"+me).set({ round: t.round, noms, vote: turretSel[0], attempt }); toast("Your vote is in"); }
+  catch(_){ toast("Your vote didn't go through. Try again."); }
+  finally { turretSaving = false; renderTurret(true); }
+}
+
+/* ----- host page automation ----- */
+async function turretAutomation(){
+  if (turretBusy || !(role === "host" || isTrial())) return;
+  turretBusy = true;
+  try {
+    const t = turretState(), now = Date.now();
+    if (t && (t.phase === "nominate" || t.phase === "vote")){
+      if (isTrial() && now >= t.phaseAt + TRIAL_PICK_MS){
+        // Sample traitors make their picks on their own.
+        t.traitors.filter(id => id !== TRIAL_ME).forEach(id => {
+          const p = trialPicks[id];
+          if (t.phase === "nominate" && !(p && p.round === t.round)){
+            const pool = shuffle(t.candidates.slice());
+            trialPicks[id] = { round: t.round, noms: pool.slice(0, Math.random() < 0.5 ? 1 : 2), vote: null };
+          } else if (t.phase === "vote" && !(p && p.round === t.round && p.vote && (p.attempt || 1) === (t.attempt || 1))){
+            trialPicks[id] = { ...(p || { round: t.round, noms: [] }), round: t.round, attempt: t.attempt || 1, vote: t.shortlist[Math.floor(Math.random() * t.shortlist.length)] };
+          }
+        });
+      }
+      const pr = turretProgress(t);
+      if (t.phase === "nominate" && pr.nominated === pr.total) await closeNominations(t);
+      else if (t.phase === "vote" && pr.voted === pr.total) await closeTurretVote(t);
+      else await fanOut(t, false);
+    }
+    const m = murderState(), plan = planState();
+    if (m && m.phase === "reveal" && plan && plan.round === m.round && now >= m.nextAt){
+      if (m.stage === "batches"){
+        const shown = m.shown.concat([plan.batches[m.shown.length]]);
+        const last = shown.length >= plan.batches.length;
+        await putMurder({ ...m, shown, stage: last ? "suspense" : "batches", nextAt: now + (last ? FINAL_MS : BATCH_MS), lastAt: now });
+      } else if (m.stage === "suspense"){
+        await putMurder({ ...m, stage:"done", phase:"done", final: { safe: plan.finalSafe, victim: plan.victim || null }, lastAt: now });
+        if (plan.victim) await setStatus(plan.victim, "murdered");
+        if (plan.saved) await setPower(plan.saved, { ...(powersMap()[plan.saved] || {}), shield: false, savedRound: m.round });
+        if (plan.recruit) await applyRecruit(plan.recruit, m.round);
+        await expireShields(m.startedAt);
+      }
+    }
+  } catch(_){ /* retried on the next tick */ }
+  finally { turretBusy = false; }
+}
+
+/* ----- rendering ----- */
+function choiceBtn(id, sel, attr){
+  return `<button class="choice" type="button" ${attr}="${escapeHtml(id)}" aria-pressed="${sel.includes(id)}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}</span></button>`;
+}
+function namesList(ids){ return ids.map(id => `<b>${escapeHtml(nameOf(id))}</b>`).join(", "); }
+
+function renderTurret(force){
+  const stage = $("turretStage");
+  const host = isHostView(), player = isPlayerView();
+  const t = turretState(), m = murderState();
+  let html = "", key = "";
+
+  if (host && gameState().started && plainSetup && !turretActive() && !murderActive()){
+    key = ["plainsetup", plainMinutes].join("|");
+    html = `<span class="kicker">Murder in plain sight</span><h3>Set the Traitors' time limit</h3>
+      <p style="margin:0;max-width:56ch;margin-inline:auto">The Traitors get a random task to complete without being caught. Only you will see the time limit. This can only be used once per game.</p>
+      <div class="field" style="max-width:220px;margin-inline:auto;text-align:center"><label for="plainMins">Minutes</label><input id="plainMins" type="number" min="1" max="240" value="${plainMinutes}" inputmode="numeric"></div>
+      <div class="acts"><button class="btn solid" type="button" data-turret="plain-start">Give the Traitors their task</button><button class="link" type="button" data-turret="plain-cancel">Cancel</button></div>`;
+  } else if (host && gameState().started && (turretActive() || murderActive())){
+    if (!murderActive() && t.mode === "plain" && t.phase === "task"){
+      const left = t.deadline - Date.now();
+      key = ["plaintask", t.round, plainSel, left > 0, Math.ceil(Math.max(0, left) / 1000)].join("|");
+      html = `<span class="kicker">Murder in plain sight · Night ${t.round}</span><h3>The Traitors are on the hunt</h3>
+        <p style="margin:0">Their task: <b>${escapeHtml(t.task)}</b></p>
+        <div class="clock ${left <= 60000 ? "low" : ""}">${left > 0 ? fmtClock(left) : "Time's up"}</div>
+        <p class="muted" style="margin:0">Only you can see the time limit (${t.minutes} min). When the Traitors tell you it's done, check their proof, then choose the victim they named.</p>
+        <div class="choices">${t.candidates.filter(id => livingIds().includes(id)).map(id => choiceBtn(id, plainSel ? [plainSel] : [], "data-plainsel")).join("")}</div>
+        <div class="acts">
+          <button class="btn solid danger" type="button" data-turret="plain-confirm" ${plainSel ? "" : "disabled"}>${plainSel ? `Task done: murder ${escapeHtml(nameOf(plainSel))}` : "Choose the victim"}</button>
+          <button class="btn small" type="button" data-turret="plain-fail">Task not completed: no murder</button>
+        </div>`;
+    } else if (murderActive()){
+      const shownN = m.shown.reduce((a, b) => a + b.ids.length, 0) + (m.final ? m.final.safe.length + 1 : 0);
+      const plan = planState();
+      key = ["hm", m.round, m.stage, shownN].join("|");
+      const savedNote = plan && plan.saved ? `<b>${escapeHtml(nameOf(plan.saved))}</b> was targeted but their shield saved them, so nobody dies.` : "";
+      const status = m.stage === "done"
+        ? `<p style="margin:0">${m.final.victim ? `<b>${escapeHtml(nameOf(m.final.victim))}</b> has been revealed as murdered.` : `Everyone was revealed as safe. ${savedNote}`}</p>`
+        : m.stage === "suspense"
+          ? `<p style="margin:0">The last players are about to be revealed. ${plan ? (plan.victim ? `The victim is <b>${escapeHtml(nameOf(plan.victim))}</b>.` : savedNote) : ""}</p>`
+          : `<p style="margin:0">${shownN} of ${m.total} revealed as safe so far.</p>`;
+      html = `<span class="kicker">Breakfast · Murder ${m.round}</span><h3>The breakfast reveal is on the community screen</h3>${status}
+        <div class="acts"><button class="btn ${m.stage === "done" ? "solid" : "small"}" type="button" data-turret="end-murder">End murder</button></div>`;
+    } else {
+      const pr = turretProgress(t), P = picksMap();
+      const noms = nominationsOf(t);
+      key = ["ht", t.round, t.phase, t.attempt, JSON.stringify(pr), JSON.stringify(noms), t.victim, JSON.stringify(t.tie)].join("|");
+      const perTraitor = t.traitors.map(id => {
+        const p = P[id] && P[id].round === t.round ? P[id] : null;
+        const what = t.phase === "nominate" ? (p && p.noms && p.noms.length ? namesList(p.noms) : "<span class=\"muted\">waiting…</span>")
+          : (p && p.vote && (p.attempt || 1) === (t.attempt || 1) ? namesList([p.vote]) : "<span class=\"muted\">waiting…</span>");
+        return `<li><b>${escapeHtml(nameOf(id))}</b> → ${what}</li>`;
+      }).join("");
+      let body = "", acts = "";
+      if (t.phase === "nominate"){
+        body = `<p style="margin:0">${t.mode === "recruit" ? "Recruitment night. Each Traitor is picking 1 or 2 Faithful to shortlist for recruitment." : "Each Traitor is picking 1 or 2 Faithful for the shortlist."} ${pr.nominated} of ${pr.total} have chosen.</p><ul class="turret-list">${perTraitor}</ul>`;
+        acts = `<button class="btn small" type="button" data-turret="close-noms" ${pr.nominated ? "" : "disabled"}>Close nominations</button>`;
+      } else if (t.phase === "vote"){
+        body = `<p style="margin:0">${(t.attempt || 1) > 1 ? `The first vote tied, so the Traitors are voting again between ${namesList(t.shortlist)}. Another tie and the victim is chosen at random.` : `Shortlist: ${namesList(t.shortlist)}.`} ${pr.voted} of ${pr.total} Traitors have voted.</p><ul class="turret-list">${perTraitor}</ul>`;
+        acts = `<button class="btn small" type="button" data-turret="close-vote" ${pr.voted ? "" : "disabled"}>Close the Traitors' vote</button>`;
+      } else if (t.phase === "tie"){
+        body = `<p style="margin:0">The Traitors are tied between ${namesList(t.tie)}. You decide who is murdered.</p>`;
+        acts = t.tie.map(id => `<button class="btn small danger" type="button" data-victim="${escapeHtml(id)}">Murder ${escapeHtml(nameOf(id))}</button>`).join("");
+      } else if (t.phase === "chosen" && t.failed){
+        body = `<div class="verdict">The Traitors didn't complete their task.</div><p class="muted" style="margin:0">Nobody will be murdered. The community screen will still announce a murder in plain sight at breakfast.</p>`;
+        acts = `<button class="btn solid" type="button" data-turret="start-murder">Start breakfast</button>`;
+      } else if (t.phase === "chosen"){
+        body = `${t.randomPick ? `<p style="margin:0">The revote tied again between ${namesList(t.tie)}, so the victim was chosen at random.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(t.victim))} has been selected for ${t.mode === "recruit" ? "recruitment" : "murder"}.</div><p class="muted" style="margin:0">${t.mode === "recruit" ? "Only you and the Traitors can see this. Start breakfast when everyone is gathered. Nobody dies, and the new Traitor is told at the end of breakfast." : "Only you and the Traitors can see this. Start the murder when everyone is gathered for breakfast."}</p>${t.mode !== "recruit" && hasShield(t.victim) ? `<p class="shield-note" style="margin:0">${escapeHtml(nameOf(t.victim))} holds a shield. Nobody will be murdered tonight. The screen won't say why, and only ${escapeHtml(nameOf(t.victim))} will be told.</p>` : ""}`;
+        acts = `<button class="btn solid" type="button" data-turret="start-murder">${t.mode === "recruit" ? "Start breakfast" : "Start murder"}</button>`;
+      }
+      html = `<span class="kicker">${t.mode === "plain" ? "Murder in plain sight" : t.mode === "chain" ? "Safety Chain · The Turret" : "The Turret"} · Night ${t.round}${t.mode === "recruit" ? " · Recruitment" : ""}</span><h3>${t.mode === "recruit" ? "The Traitors are recruiting" : "The Traitors are meeting"}</h3>${body}
+        <div class="acts">${acts}<button class="link" type="button" data-turret="cancel">Cancel the Turret</button></div>`;
+    }
+  } else if (player && gameState().started && murderActive()){
+    const savedMe = (() => { const p = myPowerView(); return !!(p && p.savedRound === m.round); })();
+    const recruitedMe = ownRecruited() === m.round;
+    key = ["pm", m.round, m.stage, savedMe, recruitedMe].join("|");
+    html = m.stage === "done"
+      ? (recruitedMe
+        ? `<span class="kicker">A secret message</span><h3>Your role has changed</h3><p style="margin:0">Shield your screen, then reveal your role in the card below.</p>`
+        : savedMe
+        ? `<span class="kicker">Your shield</span><h3>You survived the night</h3><p style="margin:0">The Traitors chose to murder you, but your shield saved you. Nobody else knows. Your shield has now been used.</p>`
+        : m.final.victim
+          ? `<span class="kicker">Breakfast</span><h3>${escapeHtml(nameOf(m.final.victim))} was murdered in the night</h3>`
+          : `<span class="kicker">Breakfast</span><h3>Everyone made it through the night</h3>`)
+      : `<span class="kicker">Breakfast${m.plain ? " · A murder in plain sight" : ""}</span><h3>Breakfast is being served</h3><p class="muted" style="margin:0">Watch the community screen to see who made it through the night.</p>`;
+  } else if (player && gameState().started && ownRole() === "traitor"){
+    const tv = myTurretView();
+    if (tv && tv.phase !== "closed" && !allStatus()[myId()]){
+      const pick = myPickView(), mine = pick && pick.round === tv.round ? pick : null;
+      const selKey = tv.round + tv.phase + (tv.attempt || 1);
+      if (selKey !== turretSelKey){ turretSelKey = selKey; turretSel = []; }
+      const pr = tv.progress || { nominated:0, voted:0, total:1 };
+      key = ["pt", tv.round, tv.mode, tv.task, tv.failed, tv.phase, tv.attempt, JSON.stringify(mine), JSON.stringify(turretSel), turretSaving, JSON.stringify(pr), tv.victim, JSON.stringify(tv.tie), revealed].join("|");
+      if (!revealed){
+        html = `<span class="kicker">A secret message</span><h3>Shield your screen</h3><p class="muted" style="margin:0">Make sure nobody can see, then open it.</p>
+          <div class="acts"><button class="btn solid" type="button" data-act="reveal">Open</button></div>`;
+      } else if (tv.mode === "plain" && tv.phase === "task"){
+        html = `<span class="kicker">Murder in plain sight</span><h3>Your task</h3>
+          <div class="verdict role-traitor">${escapeHtml(tv.task || "")}</div>
+          <p style="margin:0">Work with your fellow Traitors to complete it without getting caught. You have a time limit, but only the host knows how long. When it's done, tell the host privately and name your victim.</p>`;
+      } else if (tv.mode === "plain" && tv.phase === "chosen"){
+        html = tv.failed
+          ? `<span class="kicker">Murder in plain sight</span><h3>The task failed</h3><p style="margin:0">Nobody will be murdered tonight. Keep a straight face at breakfast.</p>`
+          : `<span class="kicker">Murder in plain sight</span><h3>The deed is done</h3><div class="verdict role-traitor">${escapeHtml(nameOf(tv.victim))} will be murdered.</div><p class="muted" style="margin:0">Keep a straight face at breakfast.</p>`;
+      } else if (tv.phase === "nominate"){
+        html = mine && mine.noms && mine.noms.length
+          ? `<span class="kicker">The Turret · Night ${tv.round}</span><h3>Your picks are in</h3><p style="margin:0">You put ${namesList(mine.noms)} on the shortlist. Waiting for the other Traitors (${pr.nominated} of ${pr.total}).</p>`
+          : `<span class="kicker">The Turret · Night ${tv.round}</span><h3>${tv.mode === "recruit" ? "Recruitment night" : "Choose who to shortlist"}</h3><p style="margin:0">${tv.mode === "recruit" ? "Your numbers are low. Pick 1 or 2 Faithful you'd like to recruit as a Traitor." : "Pick 1 or 2 Faithful to put on the shortlist for murder."}</p>
+            <div class="choices">${tv.candidates.map(id => choiceBtn(id, turretSel, "data-tsel")).join("")}</div>
+            <div class="acts"><button class="btn solid" type="button" data-turret="submit-noms" ${turretSel.length && !turretSaving ? "" : "disabled"}>${turretSaving ? "Sending…" : `Shortlist ${turretSel.length || ""} player${turretSel.length === 1 ? "" : "s"}`}</button></div>`;
+      } else if (tv.phase === "vote"){
+        const votedNow = mine && mine.vote && (mine.attempt || 1) === (tv.attempt || 1);
+        const revote = (tv.attempt || 1) > 1;
+        html = votedNow
+          ? `<span class="kicker">The Turret · Night ${tv.round}</span><h3>Your vote is in</h3><p style="margin:0">You voted to ${tv.mode === "recruit" ? "recruit" : "murder"} <b>${escapeHtml(nameOf(mine.vote))}</b>. Waiting for the other Traitors (${pr.voted} of ${pr.total}).</p>`
+          : `<span class="kicker">The Turret · Night ${tv.round}</span><h3>${revote ? "It's a tie. Vote again" : tv.mode === "recruit" ? "Who will you recruit?" : "Who will you murder?"}</h3><p style="margin:0">${revote ? `Choose between the tied players. If you tie again, the ${tv.mode === "recruit" ? "recruit" : "victim"} will be chosen at random.` : "Vote for one player from the shortlist."}</p>
+            <div class="choices">${tv.shortlist.map(id => choiceBtn(id, turretSel, "data-tvote")).join("")}</div>
+            <div class="acts"><button class="btn solid" type="button" data-turret="submit-vote" ${turretSel.length === 1 && !turretSaving ? "" : "disabled"}>${turretSaving ? "Sending…" : tv.mode === "recruit" ? "Cast recruitment vote" : "Cast murder vote"}</button></div>`;
+      } else if (tv.phase === "tie"){
+        html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The vote is tied</h3><p style="margin:0">You're split between ${namesList(tv.tie)}. The host will decide.</p>`;
+      } else if (tv.phase === "chosen"){
+        html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The deed is decided</h3>${tv.randomPick ? `<p style="margin:0">You tied again, so fate made the choice.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(tv.victim))} ${tv.mode === "recruit" ? "will be recruited tonight. They join you after breakfast." : "will be murdered tonight."}</div><p class="muted" style="margin:0">Keep a straight face at breakfast.</p>`;
+      }
+    }
+  }
+
+  if (!html){ stage.hidden = true; turretKey = ""; return; }
+  stage.hidden = false;
+  if (key === turretKey && !force) return;
+  turretKey = key;
+  stage.innerHTML = html;
+}
+$("turretStage").addEventListener("click", e => {
+  if (e.target.closest("[data-act='reveal']")){ revealed = true; renderWall(); return; }
+  const tsel = e.target.closest("[data-tsel]");
+  if (tsel){
+    const id = tsel.dataset.tsel;
+    turretSel = turretSel.includes(id) ? turretSel.filter(x => x !== id) : turretSel.concat([id]).slice(-2);
+    renderTurret(true); return;
+  }
+  const tv = e.target.closest("[data-tvote]");
+  if (tv){ turretSel = [tv.dataset.tvote]; renderTurret(true); return; }
+  const ps = e.target.closest("[data-plainsel]");
+  if (ps){ plainSel = ps.dataset.plainsel; renderTurret(true); return; }
+  const vic = e.target.closest("[data-victim]");
+  if (vic){ pickVictim(vic.dataset.victim); return; }
+  const a = e.target.closest("[data-turret]")?.dataset.turret; if (!a) return;
+  const t = turretState();
+  if (a === "submit-noms") submitNoms();
+  else if (a === "submit-vote") submitTurretVote();
+  else if (a === "close-noms" && t) closeNominations(t).catch(()=> toast("That didn't save. Try again."));
+  else if (a === "close-vote" && t) closeTurretVote(t).catch(()=> toast("That didn't save. Try again."));
+  else if (a === "start-murder") startMurder();
+  else if (a === "plain-start"){ plainMinutes = parseInt(($("plainMins") || {}).value, 10) || 20; startPlainSight(plainMinutes); }
+  else if (a === "plain-cancel"){ plainSetup = false; renderWall(); }
+  else if (a === "plain-confirm" && plainSel) resolvePlain(plainSel);
+  else if (a === "plain-fail") resolvePlain(null);
+  else if (a === "end-murder") endMurder();
+  else if (a === "cancel") cancelTurret();
+});
+
+/* ----- the community screen's breakfast wall ----- */
+function murderWallIds(){
+  const m = murderState(); if (!m) return { safe: [], victim: null, fresh: [] };
+  const safe = []; m.shown.forEach(b => safe.push(...b.ids));
+  let fresh = m.shown.length && m.stage !== "done" ? m.shown[m.shown.length - 1].ids : [];
+  let victim = null;
+  if (m.final){ safe.push(...m.final.safe); victim = m.final.victim; fresh = m.final.safe.concat([victim]); }
+  return { safe, victim, fresh };
+}
+function renderMurderWall(wall){
+  const m = murderState();
+  const { safe, victim } = murderWallIds();
+  // Keep cards already on the wall so only newly revealed portraits fade in.
+  if (wall.dataset.mround !== String(m.round)){ wall.innerHTML = ""; wall.dataset.mround = String(m.round); }
+  const have = new Map([...wall.querySelectorAll(".card")].map(c => [c.dataset.pid, c]));
+  let k = 0;
+  const add = (id, murdered) => {
+    const r = murdered ? revealedRole(id) : null;
+    const tagText = murdered ? (r ? r.toUpperCase() : "MURDERED") : "SAFE";
+    if (have.has(id)){ const t = have.get(id).querySelector(".role-tag"); if (t) t.textContent = tagText; return; }
+    const p = allPlayers().find(x => x.id === id) || { id, name: nameOf(id) };
+    const card = document.createElement("article");
+    card.className = "card breakfast" + (murdered ? " out" : "");
+    card.dataset.pid = id;
+    card.style.animationDelay = (k++ * 0.8) + "s";
+    const frame = document.createElement("div"); frame.className = "portrait";
+    const canvas = document.createElement("div"); canvas.className = "canvas";
+    if (p.photo && /^data:image\/jpeg;base64,/.test(p.photo)){ const img = document.createElement("img"); img.src = p.photo; img.alt = "Portrait of " + (p.name || "a player"); canvas.appendChild(img); }
+    else { const sp = document.createElement("span"); sp.className = "initials"; sp.textContent = initials(p.name); canvas.appendChild(sp); }
+    canvas.insertAdjacentHTML("beforeend", '<div class="vignette"></div>');
+    if (murdered){ const st = document.createElement("div"); st.className = "stamp"; st.textContent = "MURDERED"; canvas.appendChild(st); }
+    frame.appendChild(canvas);
+    const plaque = document.createElement("div"); plaque.className = "plaque"; plaque.textContent = p.name || "Unnamed";
+    const tag = document.createElement("span");
+    tag.className = "role-tag" + (murdered ? " traitor" : " safe");
+    tag.textContent = tagText;
+    card.append(frame, plaque, tag);
+    wall.appendChild(card);
+  };
+  safe.forEach(id => add(id, false));
+  if (victim) add(victim, true);
+}
+// The screen notes when it first showed the final group, and keeps the suspense banner
+// up until the last of those portraits has finished fading in.
+const finalSeenAt = {};
+function finalFadeDone(m){
+  if (m.stage !== "done" || !m.final) return true;
+  const key = m.round;
+  if (!finalSeenAt[key]) finalSeenAt[key] = Date.now();
+  const count = m.final.safe.length + (m.final.victim ? 1 : 0);
+  const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const wait = reduce ? 0 : (count - 1) * 800 + (m.final.victim ? 4500 : 3000) + 300;
+  return Date.now() >= finalSeenAt[key] + wait;
+}
+let lastBannerHtml = "";
+function breakfastBanner(){
+  const m = murderState(), h = baseBanner();
+  if (!m || !m.plain) return h;
+  return h.replace('<span class="kicker">Breakfast</span>', '<span class="kicker">Breakfast · A murder in plain sight</span>')
+    .replace("was murdered in the night", "was murdered in plain sight")
+    .replace("No one was murdered last night.", "The murder in plain sight failed.")
+    .replace("Who made it through the night?", "There was a murder in plain sight. Who made it through?");
+}
+function baseBanner(){
+  const m = murderState();
+  const { safe, victim } = murderWallIds();
+  if (m.stage === "done" && !finalFadeDone(m)){
+    const n = m.final.safe.length + (victim ? 1 : 0);
+    return `<div class="lead"><span class="kicker">Breakfast</span><span class="big">${n} player${n === 1 ? "" : "s"} still to arrive. One of them did not survive the night.</span><span class="muted">Who will walk through the door?</span></div>`;
+  }
+  const left = m.total - safe.length - (victim ? 1 : 0);
+  if (m.stage === "done" && !victim) return `<div class="lead"><span class="kicker">Breakfast</span><span class="big">Everyone made it through the night</span><span class="muted">No one was murdered last night.</span></div>`;
+  if (m.stage === "done") return `<div class="lead"><span class="kicker">Breakfast</span><span class="big">${escapeHtml(nameOf(victim))} was murdered in the night</span><span class="muted">The Traitors have struck again. Who can you trust now?</span></div>`;
+  if (m.stage === "suspense") return `<div class="lead"><span class="kicker">Breakfast</span><span class="big">${left} player${left === 1 ? "" : "s"} still to arrive. One of them did not survive the night.</span><span class="muted">Who will walk through the door?</span></div>`;
+  return `<div class="lead"><span class="kicker">Breakfast</span><span class="big">Who made it through the night?</span><span class="muted">${safe.length ? `${safe.length} safe so far. ${left} still to arrive.` : "The Traitors have struck. Let's see who joins us for breakfast."}</span></div>`;
+}
+setInterval(() => {
+  turretAutomation();
+  if (isScreenView() && murderActive()) renderGameBar();
+  const t = turretState();
+  if (isHostView() && t && t.mode === "plain" && t.phase === "task") renderTurret(false);
+}, 300);
+
+/* ---------- Powers: the shield ---------- */
+// powers/<id>: the host reads all of them; each player reads only their own.
+let hostPowers = {}, myPower = null, powersOpen = false, powersKey = "";
+const powersMap = () => isTrial() ? (trialGame.powers || {}) : hostPowers;
+const myPowerView = () => isTrial() ? ((trialGame.powers || {})[TRIAL_ME] || null) : myPower;
+const hasShield = id => !!(powersMap()[id] && powersMap()[id].shield);
+const DAGGER_VOTES = 3;
+const hasDagger = id => !!(powersMap()[id] && powersMap()[id].dagger);
+const myHasDagger = () => { const p = myPowerView(); return !!(p && p.dagger); };
+async function setPower(id, data){
+  if (isTrial()){ trialGame.powers = trialGame.powers || {}; trialGame.powers[id] = data; saveTrial(); renderWall(); return; }
+  await db.doc("powers/"+id).set(data);
+}
+async function expireShields(before){
+  const P = powersMap();
+  await Promise.all(Object.keys(P).filter(id => P[id].shield && (P[id].grantedAt || 0) < before)
+    .map(id => setPower(id, { ...P[id], shield: false, expired: true })));
+}
+function shieldNote(){
+  const p = myPowerView();
+  let out = p && p.shield ? `<span class="shield-note">You hold a secret shield. If the Traitors choose to murder you, it will save you. It lasts until the end of the next breakfast.</span>` : "";
+  if (p && p.dagger){
+    const left = DAGGER_VOTES - (p.daggerSeen || 0);
+    out += `<span class="shield-note dagger-note">You hold the Dagger. In one banishment vote of your choice, your vote counts twice. It can't be used in the Fire Pit, and it expires after ${left} more banishment vote${left === 1 ? "" : "s"}.</span>`;
+  }
+  return out;
+}
+function renderPowers(force){
+  const stage = $("powersStage");
+  if (!(isHostView() && powersOpen && gameState().started)){ stage.hidden = true; powersKey = ""; return; }
+  stage.hidden = false;
+  const living = livingIds(), P = powersMap();
+  const key = JSON.stringify([living, P]);
+  if (key === powersKey && !force) return;
+  powersKey = key;
+  const holders = living.filter(hasShield);
+  stage.innerHTML = `<span class="kicker">Powers</span><h3>The shield</h3>
+    <p style="margin:0;max-width:60ch;margin-inline:auto">A shielded player can't be murdered. If the Traitors pick them, nobody dies that night. Only the holder is told they have it, and it lasts until the end of the next breakfast.</p>
+    <p class="muted" style="margin:0">${holders.length ? `Shielded now: ${namesList(holders)}.` : "Nobody holds a shield."} Tap a player to give or take away a shield.</p>
+    <div class="choices">${living.map(id => `<button class="choice" type="button" data-shield="${escapeHtml(id)}" aria-pressed="${hasShield(id)}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}${hasShield(id) ? " · shielded" : ""}</span></button>`).join("")}</div>
+    <h3 style="margin-top:12px">The Dagger</h3>
+    <p style="margin:0;max-width:60ch;margin-inline:auto">The holder can make their vote count twice in one banishment vote of their choice. It's used up once drawn, can't be used in murder votes or the Fire Pit, and expires after ${DAGGER_VOTES} banishment votes. Only one player can hold it.</p>
+    <p class="muted" style="margin:0">${living.filter(hasDagger).length ? `Held by ${namesList(living.filter(hasDagger))} (${DAGGER_VOTES - ((P[living.filter(hasDagger)[0]] || {}).daggerSeen || 0)} votes left).` : "Nobody holds the Dagger."} Tap a player to give or take it.</p>
+    <div class="choices">${living.map(id => `<button class="choice" type="button" data-dagger="${escapeHtml(id)}" aria-pressed="${hasDagger(id)}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}${hasDagger(id) ? " · dagger" : ""}</span></button>`).join("")}</div>
+    <div class="acts"><button class="btn small" type="button" data-powers="close">Done</button></div>`;
+}
+$("powersStage").addEventListener("click", async e => {
+  if (e.target.closest("[data-powers='close']")){ powersOpen = false; renderWall(); return; }
+  const dg = e.target.closest("[data-dagger]");
+  if (dg){
+    const id = dg.dataset.dagger, P = powersMap(), cur = P[id] || {};
+    try {
+      if (cur.dagger){ await setPower(id, { ...cur, dagger: false }); toast(nameOf(id) + "'s Dagger was taken away"); }
+      else {
+        await Promise.all(Object.keys(P).filter(x => x !== id && P[x].dagger).map(x => setPower(x, { ...P[x], dagger: false })));
+        await setPower(id, { ...cur, dagger: true, daggerSeen: 0, daggerUsed: false, daggerExpired: false, daggerAt: Date.now() });
+        toast(nameOf(id) + " now holds the Dagger");
+      }
+    } catch(_){ toast("That didn't save. Try again."); }
+    return;
+  }
+  const b = e.target.closest("[data-shield]"); if (!b) return;
+  const id = b.dataset.shield, cur = powersMap()[id] || {};
+  try {
+    if (cur.shield){ await setPower(id, { ...cur, shield: false }); toast(nameOf(id) + "'s shield was removed"); }
+    else { await setPower(id, { ...cur, shield: true, grantedAt: Date.now(), expired: false }); toast(nameOf(id) + " now holds a shield"); }
+  } catch(_){ toast("That didn't save. Try again."); }
+});
+
+/* ---------- The Fire Pit (endgame) ---------- */
+// game/firepit is public and only ever holds what may be shown: who is still deciding
+// (as a count), then everyone's choices once all are in, then the final roles.
+// Each player's own choice goes to fpicks/<id>, which only they and the host can read.
+const FIRE_TRIAL_MS = 1500;
+let liveFire = null, fpicks = {}, myFpick = null, trialFpicks = {}, fireKey = "", fireAuto = false, fireSaving = false;
+const fireState = () => isTrial() ? (trialGame.fire || null) : liveFire;
+const firePicks = () => isTrial() ? trialFpicks : fpicks;
+const fireLive = f => !!f && ["choose","result","finale"].includes(f.phase);
+const fireOnStage = () => gameState().started && fireLive(fireState());
+function myFireChoice(){
+  const f = fireState(); if (!f) return null;
+  const p = isTrial() ? trialFpicks[TRIAL_ME] : myFpick;
+  return p && p.round === f.round ? p.choice : null;
+}
+async function putFire(f){
+  if (isTrial()){ trialGame.fire = f; saveTrial(); renderWall(); return; }
+  await db.doc("game/firepit").set(f);
+}
+function fireChoices(f){
+  const P = firePicks(), out = {};
+  f.players.forEach(id => { const p = P[id]; if (p && p.round === f.round && p.choice) out[id] = p.choice; });
+  return out;
+}
+async function startFirePit(){
+  const living = livingIds();
+  try {
+    const v = currentVote(); if (v && v.phase === "done") await putVote({ ...v, phase:"closed" });
+    const round = (fireState()?.round || 0) + 1;
+    trialFpicks = {};
+    if (living.length <= 2){ await fireFinale(round, living); return; }
+    await putFire({ round, phase:"choose", players: living, decided: 0, startedAt: Date.now() });
+    toast("The Fire Pit is lit");
+  } catch(_){ toast("The Fire Pit couldn't start. Try again."); }
+}
+async function closeFire(f){
+  const choices = fireChoices(f);
+  if (!Object.keys(choices).length){ toast("Nobody has chosen yet"); return; }
+  const outcome = Object.values(choices).includes("banish") ? "banish" : "end";
+  await putFire({ ...f, phase:"result", choices, decided: Object.keys(choices).length, outcome });
+}
+async function fireFinale(round, living){
+  const R = roleMap(), roles = {};
+  allPlayers().forEach(p => { if (R[p.id]) roles[p.id] = R[p.id]; });
+  living.forEach(id => { roles[id] = R[id] || "faithful"; });
+  const traitorsLeft = living.filter(id => roles[id] === "traitor");
+  await putFire({ round, phase:"finale", players: living, roles, traitorsLeft, winner: traitorsLeft.length ? "traitors" : "faithful" });
+}
+async function fireToVote(){
+  const f = fireState(); if (!f) return;
+  try { await putFire({ ...f, phase:"closed" }); await startVote({ endgame: true }); } catch(_){ toast("The vote couldn't start. Try again."); }
+}
+async function submitFire(choice){
+  const f = fireState(); if (!f || f.phase !== "choose") return;
+  if (isTrial()){ trialFpicks[TRIAL_ME] = { round: f.round, choice }; renderWall(); return; }
+  fireSaving = true; renderFire(true);
+  try { await db.doc("fpicks/"+me).set({ round: f.round, choice }); }
+  catch(_){ toast("Your choice didn't go through. Try again."); }
+  finally { fireSaving = false; renderFire(true); }
+}
+async function fireAutomation(){
+  if (fireAuto || !(role === "host" || isTrial())) return;
+  const f = fireState(); if (!f || f.phase !== "choose") return;
+  fireAuto = true;
+  try {
+    if (isTrial() && Date.now() >= f.startedAt + FIRE_TRIAL_MS){
+      f.players.filter(id => id !== TRIAL_ME && !(trialFpicks[id] && trialFpicks[id].round === f.round))
+        .forEach(id => { trialFpicks[id] = { round: f.round, choice: Math.random() < 0.7 ? "end" : "banish" }; });
+    }
+    const decided = Object.keys(fireChoices(f)).length;
+    if (decided === f.players.length) await closeFire(f);
+    else if (decided !== f.decided) await putFire({ ...f, decided });
+  } catch(_){ /* retried on the next tick */ }
+  finally { fireAuto = false; }
+}
+
+function firePortrait(id, tagText, tagClass){
+  return `<figure class="fire-player">${bigPortrait(id, "fire-portrait")}<figcaption class="plaque">${escapeHtml(nameOf(id))}</figcaption>${tagText ? `<span class="role-tag ${tagClass || ""}">${tagText}</span>` : ""}</figure>`;
+}
+function renderFire(force){
+  const stage = $("fireStage");
+  const host = isHostView(), player = isPlayerView(), screen = isScreenView();
+  const f = fireState();
+  if (!fireOnStage() || murderActive() || (!host && !player && !screen)){ if (!stage.hidden){ stage.hidden = true; fireKey = ""; applyScreenLayout(); } return; }
+  const wasHidden = stage.hidden;
+  stage.hidden = false;
+  if (wasHidden) applyScreenLayout();
+  const mine = myFireChoice();
+  const inGame = f.players.includes(myId());
+  const choicesLive = host ? fireChoices(f) : {};
+  const key = JSON.stringify([f.round, f.phase, f.decided, f.outcome, host, player, screen, mine, fireSaving, inGame, choicesLive, ownRole()]);
+  if (key === fireKey && !force) return;
+  fireKey = key;
+  const kick = `<span class="kicker">The Fire Pit · Round ${f.round}</span>`;
+  let html = "";
+
+  if (f.phase === "choose"){
+    if (player && !host && !screen){
+      if (!inGame) html = `${kick}<h3>The Fire Pit</h3><p class="muted" style="margin:0">The remaining players are deciding whether to end the game. Watch the community screen.</p>`;
+      else if (mine) html = `${kick}<h3>Your choice is in</h3><p style="margin:0">You chose to <b>${mine === "end" ? "end the game" : "banish again"}</b>. Waiting for the others (${f.decided} of ${f.players.length}).</p>`;
+      else html = `${kick}<h3>End the game, or banish again?</h3>
+        <p style="margin:0;max-width:46ch;margin-inline:auto">If you believe every Traitor is gone, end the game. If you think a Traitor is still among you, banish again. One vote to banish means everyone votes again.</p>
+        <div class="acts fire-choices">
+          <button class="btn solid big-btn" type="button" data-fire="end" ${fireSaving ? "disabled" : ""}>End the game</button>
+          <button class="btn danger big-btn" type="button" data-fire="banish" ${fireSaving ? "disabled" : ""}>Banish again</button>
+        </div>`;
+    } else {
+      html = `${kick}<h3>End the game, or banish again?</h3>
+        <p class="stage-lede">${f.players.length} players remain. Each of you, on your phone: are the Traitors gone, or must you banish again?</p>
+        <div class="fire-row">${f.players.map(id => firePortrait(id, host && choicesLive[id] ? (choicesLive[id] === "end" ? "END" : "BANISH") : "", host && choicesLive[id] === "banish" ? "traitor" : "")).join("")}</div>
+        <p class="muted step-count">${f.decided} of ${f.players.length} have decided</p>
+        ${host ? `<div class="acts"><button class="btn small" type="button" data-fire="close" ${f.decided ? "" : "disabled"}>Close the choices</button><button class="link" type="button" data-fire="cancel">Cancel the Fire Pit</button></div>` : ""}`;
+    }
+  } else if (f.phase === "result"){
+    const banishers = Object.keys(f.choices).filter(id => f.choices[id] === "banish");
+    const headline = f.outcome === "banish"
+      ? `${banishers.length === 1 ? "One player wants" : `${banishers.length} players want`} to banish again`
+      : "Everyone agrees to end the game";
+    const sub = f.outcome === "banish" ? "The Round Table must vote once more." : "The game is over. It's time to reveal the truth.";
+    const row = `<div class="fire-row">${f.players.map(id => firePortrait(id, f.choices[id] ? (f.choices[id] === "end" ? "END" : "BANISH") : "NO CHOICE", f.choices[id] === "banish" ? "traitor" : "")).join("")}</div>`;
+    const acts = host ? `<div class="acts">${f.outcome === "banish"
+      ? `<button class="btn solid" type="button" data-fire="vote">Start banishment vote</button>`
+      : `<button class="btn solid" type="button" data-fire="finale">Reveal the winners</button>`}</div>` : "";
+    html = (player && !host && !screen)
+      ? `${kick}<h3>${headline}</h3><p style="margin:0">${sub}</p>`
+      : `${kick}<h3>${headline}</h3>${row}<p class="stage-lede">${sub}</p>${acts}`;
+  } else if (f.phase === "finale"){
+    const tw = f.winner === "traitors";
+    const headline = tw ? "The Traitors win" : "The Faithful win";
+    const sub = tw
+      ? `${f.traitorsLeft.map(id => escapeHtml(nameOf(id))).join(" and ")} ${f.traitorsLeft.length > 1 ? "were Traitors" : "was a Traitor"} all along.`
+      : "Every Traitor has been banished. The Faithful share the prize.";
+    if (player && !host && !screen){
+      const myTeam = ownRole();
+      const won = myTeam ? ((myTeam === "traitor") === tw) : null;
+      html = `<span class="kicker">The end</span><h3>${headline}</h3><p style="margin:0">${sub}</p>${won === null ? "" : `<div class="verdict ${won ? "role-faithful" : "role-traitor"}">${won ? "You won." : "You lost."}</div>`}`;
+    } else {
+      html = `<span class="kicker">The end</span><h3 class="${tw ? "final-traitor" : "final-faithful"}">${headline}</h3>
+        <div class="fire-row">${f.players.map(id => firePortrait(id, f.roles[id] === "traitor" ? "TRAITOR" : "FAITHFUL", f.roles[id] === "traitor" ? "traitor" : "")).join("")}</div>
+        <p class="stage-lede">${sub}</p>${host ? `<p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>` : ""}`;
+    }
+  }
+  stage.innerHTML = html;
+  stage.querySelectorAll(".fire-player .plaque").forEach(el => { el.style.whiteSpace = "nowrap"; });
+}
+$("fireStage").addEventListener("click", e => {
+  const a = e.target.closest("[data-fire]")?.dataset.fire; if (!a) return;
+  const f = fireState(); if (!f) return;
+  if (a === "end" || a === "banish") submitFire(a);
+  else if (a === "close") closeFire(f).catch(()=> toast("That didn't save. Try again."));
+  else if (a === "cancel") putFire({ ...f, phase:"closed" }).catch(()=> toast("That didn't save. Try again."));
+  else if (a === "vote") fireToVote();
+  else if (a === "finale") fireFinale(f.round, f.players).catch(()=> toast("That didn't save. Try again."));
+});
+setInterval(() => { fireAutomation(); }, 300);
+
+/* ---------- Special murders: the Safety Chain ---------- */
+// game/chain is public: who is safe (in order), who is still unsafe, and whose turn it is.
+// Each chooser's pick goes to cpicks/<id>; the host's page applies it to the chain.
+const CHAIN_LEFT = 6, CHAIN_TRIAL_MS = 2000;
+let liveChain = null, cpicks = {}, myCpick = null, trialCpicks = {};
+let chainKey = "", chainAuto = false, chainSaving = false, chainSel = null, chainSetup = false, chainStarter = null, specialOpen = false;
+const chainState = () => isTrial() ? (trialGame.chain || null) : liveChain;
+const chainUsed = () => { const c = chainState(); return !!c && (c.completed || c.phase !== "closed"); };
+const chainLive = () => { const c = chainState(); return !!c && gameState().started && (c.phase === "chain" || c.phase === "ready"); };
+async function putChain(c){
+  if (isTrial()){ trialGame.chain = c; saveTrial(); renderWall(); return; }
+  await db.doc("game/chain").set(c);
+}
+async function startChain(starter){
+  if (turretOrMurderBusy() || voteBusy() || chainUsed()) return;
+  const living = livingIds();
+  if (!living.includes(starter)) return;
+  const remaining = shuffle(living.filter(id => id !== starter));
+  const now = Date.now();
+  trialCpicks = {}; chainSetup = false; specialOpen = false; chainStarter = null; chainSel = null;
+  try {
+    await putChain({ round: (chainState()?.round || 0) + 1, phase: remaining.length <= CHAIN_LEFT ? "ready" : "chain",
+      order: [starter], remaining, current: starter, step: 1, total: remaining.length, promptAt: now });
+    toast("The Safety Chain has begun");
+  } catch(_){ toast("The Safety Chain couldn't start. Try again."); }
+}
+async function applyChainPick(c, pick){
+  if (!c.remaining.includes(pick)) return;
+  const remaining = c.remaining.filter(id => id !== pick);
+  await putChain({ ...c, order: c.order.concat([pick]), remaining, current: pick, step: c.step + 1, promptAt: Date.now(),
+    phase: remaining.length <= CHAIN_LEFT ? "ready" : "chain" });
+}
+async function submitChainPick(pick){
+  const c = chainState(); if (!c || c.phase !== "chain" || c.current !== myId()) return;
+  if (isTrial()){ trialCpicks[TRIAL_ME] = { round: c.round, step: c.step, pick }; chainSel = null; renderWall(); return; }
+  chainSaving = true; renderChain(true);
+  try { await db.doc("cpicks/"+me).set({ round: c.round, step: c.step, pick }); chainSel = null; }
+  catch(_){ toast("That didn't go through. Try again."); }
+  finally { chainSaving = false; renderChain(true); }
+}
+async function chainAutomation(){
+  if (chainAuto || !(role === "host" || isTrial())) return;
+  const c = chainState(); if (!c || c.phase !== "chain") return;
+  chainAuto = true;
+  try {
+    const picker = c.current;
+    let pick = null;
+    if (isTrial()){
+      if (picker === TRIAL_ME){ const p = trialCpicks[TRIAL_ME]; if (p && p.round === c.round && p.step === c.step) pick = p.pick; }
+      else if (Date.now() >= c.promptAt + CHAIN_TRIAL_MS) pick = c.remaining[Math.floor(Math.random() * c.remaining.length)];
+    } else {
+      const p = cpicks[picker];
+      if (p && p.round === c.round && p.step === c.step) pick = p.pick;
+    }
+    if (pick && c.remaining.includes(pick)) await applyChainPick(c, pick);
+  } catch(_){ /* retried on the next tick */ }
+  finally { chainAuto = false; }
+}
+async function chainToTraitors(){
+  const c = chainState(); if (!c || c.phase !== "ready") return;
+  const R = roleMap();
+  const shortlist = c.remaining.filter(id => R[id] === "faithful");
+  const traitors = livingIds().filter(id => R[id] === "traitor");
+  if (!traitors.length){ toast("There are no Traitors left in the game"); return; }
+  if (!shortlist.length){ toast("Every unsafe player is a Traitor, so nobody can be murdered"); return; }
+  trialPicks = {};
+  const now = Date.now();
+  try {
+    await setTurret({ round: (turretState()?.round || 0) + 1, mode:"chain", phase: shortlist.length === 1 ? "chosen" : "vote", phaseAt: now, attempt: 1,
+      traitors, candidates: shortlist, shortlist, victim: shortlist.length === 1 ? shortlist[0] : null, tie: null });
+    toast("The Traitors are choosing among the unsafe");
+  } catch(_){ toast("That didn't save. Try again."); }
+}
+async function cancelChain(){
+  const c = chainState(); if (!c) return;
+  try {
+    await putChain({ ...c, phase:"closed" });
+    const t = turretState(); if (t && t.mode === "chain" && t.phase !== "closed") await setTurret({ ...t, phase:"closed" });
+  } catch(_){ toast("The Safety Chain couldn't be cancelled. Try again."); }
+}
+
+function renderChain(force){
+  const stage = $("chainStage");
+  const host = isHostView(), player = isPlayerView();
+  const c = chainState(), started = gameState().started;
+  let html = "", key = "";
+
+  if (host && started && specialOpen && !chainSetup && !plainSetup && !turretOrMurderBusy() && !voteBusy()){
+    key = ["special", mipsUsed(), chainUsed()].join("|");
+    html = `<span class="kicker">Special murders</span><h3>Choose a special murder</h3>
+      <div class="special-grid">
+        <button class="special-opt" type="button" data-chain="pick-plain" ${mipsUsed() ? "disabled" : ""}>
+          <b>Murder in plain sight</b><span>The Traitors must complete a secret task to murder. ${mipsUsed() ? "Already used this game." : "Once per game."}</span></button>
+        ${chainUsed() ? "" : `<button class="special-opt" type="button" data-chain="pick-chain">
+          <b>Safety Chain</b><span>Players save each other one by one until ${CHAIN_LEFT} remain unsafe. The Traitors murder one of them. Once per game.</span></button>`}
+      </div>
+      <div class="acts"><button class="link" type="button" data-chain="special-close">Close</button></div>`;
+  } else if (host && started && chainSetup && !chainLive()){
+    const living = livingIds();
+    key = ["chainsetup", chainStarter, living.length].join("|");
+    html = `<span class="kicker">Safety Chain</span><h3>Who starts the chain?</h3>
+      <p style="margin:0">The player you choose is safe tonight and picks the next player to save. The chain stops when ${CHAIN_LEFT} players are left unsafe.</p>
+      <div class="choices">${living.map(id => choiceBtn(id, chainStarter ? [chainStarter] : [], "data-chainstart")).join("")}</div>
+      <div class="acts"><button class="btn solid" type="button" data-chain="start" ${chainStarter ? "" : "disabled"}>${chainStarter ? `Start the chain with ${escapeHtml(nameOf(chainStarter))}` : "Choose who starts"}</button>
+        <button class="link" type="button" data-chain="setup-cancel">Cancel</button></div>`;
+  } else if (host && chainLive()){
+    const t = turretState(), voting = t && t.mode === "chain" && t.phase !== "closed";
+    key = ["hchain", c.round, c.phase, c.step, voting].join("|");
+    const safeList = `<p class="muted" style="margin:0">Safe so far: ${namesList(c.order)}</p>`;
+    if (c.phase === "chain"){
+      html = `<span class="kicker">Safety Chain · ${c.remaining.length} unsafe</span><h3>${escapeHtml(nameOf(c.current))} is choosing</h3>${safeList}
+        <p style="margin:0">If ${escapeHtml(nameOf(c.current))} can't use their phone, tap a player to choose for them.</p>
+        <div class="choices">${c.remaining.map(id => choiceBtn(id, [], "data-chainpick")).join("")}</div>
+        <div class="acts"><button class="link" type="button" data-chain="cancel">Cancel the Safety Chain</button></div>`;
+    } else {
+      html = `<span class="kicker">Safety Chain</span><h3>${c.remaining.length} players remain unsafe</h3>${safeList}
+        <p style="margin:0">Unsafe: ${namesList(c.remaining)}</p>
+        ${voting ? `<p class="muted" style="margin:0">The Traitors are voting. Follow along in the Turret panel.</p>`
+          : `<div class="acts"><button class="btn solid danger" type="button" data-chain="to-traitors">Send to the Traitors</button><button class="link" type="button" data-chain="cancel">Cancel the Safety Chain</button></div>`}`;
+    }
+  } else if (player && !host && chainLive()){
+    const meId = myId(), safe = c.order.includes(meId), inGame = livingIds().includes(meId) || c.remaining.includes(meId) || safe;
+    const myTurn = c.phase === "chain" && c.current === meId;
+    const pending = isTrial() ? (trialCpicks[TRIAL_ME] && trialCpicks[TRIAL_ME].round === c.round && trialCpicks[TRIAL_ME].step === c.step)
+      : (myCpick && myCpick.round === c.round && myCpick.step === c.step);
+    key = ["pchain", c.round, c.phase, c.step, myTurn, safe, chainSel, chainSaving, pending].join("|");
+    if (allStatus()[meId] || !ownRole()){
+      html = `<span class="kicker">Safety Chain</span><h3>A Safety Chain is under way</h3><p class="muted" style="margin:0">Watch the community screen.</p>`;
+    } else if (myTurn){
+      html = `<span class="kicker">Safety Chain</span><h3>It's your turn to save someone</h3>
+        <p style="margin:0">You're safe tonight. Choose the next player to make safe.</p>
+        <div class="choices">${c.remaining.map(id => choiceBtn(id, chainSel ? [chainSel] : [], "data-chainsel")).join("")}</div>
+        <div class="acts"><button class="btn solid" type="button" data-chain="submit" ${chainSel && !chainSaving && !pending ? "" : "disabled"}>${pending || chainSaving ? "Saving…" : chainSel ? `Make ${escapeHtml(nameOf(chainSel))} safe` : "Choose a player"}</button></div>`;
+    } else if (c.phase === "chain"){
+      html = `<span class="kicker">Safety Chain</span><h3>${safe ? "You're safe tonight" : "You're not safe yet"}</h3>
+        <p style="margin:0">${escapeHtml(nameOf(c.current))} is choosing who to save next. ${c.remaining.length} players remain unsafe.</p>`;
+    } else if (inGame){
+      html = `<span class="kicker">Safety Chain</span><h3>${safe ? "You're safe tonight" : "You're one of the unsafe"}</h3>
+        <p style="margin:0">${safe ? "The Traitors can't murder you tonight." : `You're one of the last ${c.remaining.length}. The Traitors will murder one of you tonight.`}</p>`;
+    }
+  }
+
+  if (!html){ stage.hidden = true; chainKey = ""; return; }
+  stage.hidden = false;
+  if (key === chainKey && !force) return;
+  chainKey = key;
+  stage.innerHTML = html;
+}
+$("chainStage").addEventListener("click", e => {
+  const st = e.target.closest("[data-chainstart]");
+  if (st){ chainStarter = st.dataset.chainstart; renderChain(true); return; }
+  const sel = e.target.closest("[data-chainsel]");
+  if (sel){ chainSel = sel.dataset.chainsel; renderChain(true); return; }
+  const hp = e.target.closest("[data-chainpick]");
+  if (hp){ const c = chainState(); if (c && c.phase === "chain") applyChainPick(c, hp.dataset.chainpick).catch(()=> toast("That didn't save. Try again.")); return; }
+  const a = e.target.closest("[data-chain]")?.dataset.chain; if (!a) return;
+  if (a === "pick-plain"){ specialOpen = false; plainSetup = true; plainSel = null; renderWall(); }
+  else if (a === "pick-chain"){ specialOpen = false; chainSetup = true; chainStarter = null; renderWall(); }
+  else if (a === "special-close"){ specialOpen = false; renderWall(); }
+  else if (a === "setup-cancel"){ chainSetup = false; renderWall(); }
+  else if (a === "start" && chainStarter) startChain(chainStarter);
+  else if (a === "submit" && chainSel) submitChainPick(chainSel);
+  else if (a === "to-traitors") chainToTraitors();
+  else if (a === "cancel") cancelChain();
+});
+
+/* ----- the community screen's Safety Chain wall ----- */
+function renderChainWall(wall){
+  const c = chainState();
+  if (wall.dataset.chround !== String(c.round)){ wall.innerHTML = ""; wall.dataset.chround = String(c.round); }
+  const keep = new Set(c.remaining);
+  wall.querySelectorAll(".card").forEach(card => {
+    if (!keep.has(card.dataset.pid) && !card.classList.contains("leaving")){
+      card.classList.add("leaving");
+      setTimeout(() => { card.remove(); }, 1400);
+    }
+  });
+  const have = new Set([...wall.querySelectorAll(".card")].map(cd => cd.dataset.pid));
+  c.remaining.forEach(id => {
+    if (have.has(id)) return;
+    const p = allPlayers().find(x => x.id === id) || { id, name: nameOf(id) };
+    const card = document.createElement("article");
+    card.className = "card chain-card"; card.dataset.pid = id;
+    const frame = document.createElement("div"); frame.className = "portrait";
+    const canvas = document.createElement("div"); canvas.className = "canvas";
+    if (p.photo && /^data:image\/jpeg;base64,/.test(p.photo)){ const img = document.createElement("img"); img.src = p.photo; img.alt = "Portrait of " + (p.name || "a player"); canvas.appendChild(img); }
+    else { const sp = document.createElement("span"); sp.className = "initials"; sp.textContent = initials(p.name); canvas.appendChild(sp); }
+    canvas.insertAdjacentHTML("beforeend", '<div class="vignette"></div>');
+    frame.appendChild(canvas);
+    const plaque = document.createElement("div"); plaque.className = "plaque"; plaque.textContent = p.name || "Unnamed";
+    card.append(frame, plaque);
+    wall.appendChild(card);
+  });
+}
+function chainBanner(){
+  const c = chainState();
+  if (c.phase === "chain") return `<div class="lead"><span class="kicker">Safety Chain</span><span class="big">${escapeHtml(nameOf(c.current))} is choosing who to save next</span><span class="muted">${c.remaining.length} players remain unsafe. The chain stops at ${CHAIN_LEFT}.</span></div>`;
+  return `<div class="lead"><span class="kicker">Safety Chain</span><span class="big">These ${c.remaining.length} remain unsafe tonight</span><span class="muted">One of them may not survive the night.</span></div>`;
+}
+setInterval(() => { chainAutomation(); }, 300);
+
+renderWall();
+boot();
+</script>
+
+<script type="module">
+// ============================================================================
+//  PASTE YOUR FIREBASE SETTINGS HERE (see SETUP.md, step 4)
+// ============================================================================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDKTmqTvViiWuHfBvQx9c0J_2NUqz6PNfs",
+  authDomain: "traitors-castle-53881.firebaseapp.com",
+  projectId: "traitors-castle-53881",
+  storageBucket: "traitors-castle-53881.firebasestorage.app",
+  messagingSenderId: "934086405439",
+  appId: "1:934086405439:web:abb8c10b0644fd6507f78a"
+};
+// ============================================================================
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeFirestore, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const done = extra => { window.FB = Object.assign(window.FB || {}, extra, { ready: true }); window.dispatchEvent(new Event("fb-ready")); };
+if (Object.values(FIREBASE_CONFIG).some(v => !v || v === "PASTE-HERE")){
+  window.FB_MISSING_CONFIG = true; done({ error: "config" });
+} else {
+  try {
+    const app = initializeApp(FIREBASE_CONFIG);
+    const fs = initializeFirestore(app, { ignoreUndefinedProperties: true });
+    const auth = getAuth(app);
+    // Same shape the game uses everywhere: doc(path) / collection(path) with get/set/update/delete/onSnapshot.
+    const wrap = s => ({ id: s.id, exists: s.exists(), data: () => (s.exists() ? s.data() : undefined) });
+    const docRef = p => { const r = doc(fs, p); return {
+      id: r.id, path: p,
+      get: async () => wrap(await getDoc(r)),
+      set: d => setDoc(r, d), update: d => updateDoc(r, d), delete: () => deleteDoc(r),
+      onSnapshot: (next, err) => onSnapshot(r, s => next(wrap(s)), e => err && err(e))
+    }; };
+    const colRef = p => { const r = collection(fs, p); return {
+      path: p, doc: id => docRef(p + "/" + id),
+      get: async () => { const q = await getDocs(r); return { docs: q.docs.map(wrap), size: q.size, empty: q.empty }; },
+      onSnapshot: (next, err) => onSnapshot(r, q => next({ docs: q.docs.map(wrap), size: q.size, empty: q.empty }), e => err && err(e))
+    }; };
+    const db = { doc: docRef, collection: colRef };
+    let fired = false;
+    onAuthStateChanged(auth, u => { if (u && !fired){ fired = true; done({ db, uid: u.uid }); } });
+    signInAnonymously(auth).catch(() => { if (!fired){ fired = true; done({ error: "auth" }); } });
+  } catch(_){ done({ error: "init" }); }
+}
+</script>
+</body>
+</html>
