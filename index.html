@@ -235,6 +235,15 @@ html.screen-mode,body.screen-mode{height:100%}
 .fire-player .role-tag{margin-top:6px}
 .fire-choices .big-btn{min-width:min(240px,80vw)}
 .fire-player.just-revealed .role-tag{animation:fadein 1.2s ease-in both}
+.fire-player.spotlight .stage-portrait{box-shadow:0 0 0 3px var(--parchment),0 0 40px rgba(236,227,207,.35);animation:breathe 2.4s ease-in-out infinite}
+.fire-player.spotlight .role-tag{animation:breathe 1.2s ease-in-out infinite}
+.fire-player.dimmed{opacity:.45;transition:opacity 1s}
+.fire-player.traitor-reveal .stage-portrait{animation:fadein 2.4s ease-in both;box-shadow:0 0 0 3px var(--blood),0 0 60px rgba(158,43,37,.7)}
+.fire-player.traitor-reveal .role-tag{animation:fadein 2.4s ease-in both}
+.calling{font-family:var(--font-display);font-size:clamp(1.6rem,5vh,3rem);letter-spacing:.06em;animation:fadein 1.5s ease-in both}
+.calling.traitor-line{color:#f0b8b2}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@media (prefers-reduced-motion:reduce){.fire-player.spotlight .stage-portrait,.fire-player.spotlight .role-tag,.fire-player.traitor-reveal .stage-portrait,.calling{animation:none}}
 .fire-player.just-revealed .stage-portrait{animation:fadein 1.6s ease-in both}
 .fire-row.winners .fire-player{animation:fadein 2.4s ease-in both}
 .final-headline{animation:fadein 2s ease-in both}
@@ -1504,32 +1513,58 @@ function turretProgress(t){
   const nominated = t.traitors.filter(id => P[id] && P[id].round === t.round && (P[id].noms || []).length).length;
   const att = t.attempt || 1;
   const voted = t.traitors.filter(id => P[id] && P[id].round === t.round && P[id].vote && (P[id].attempt || 1) === att).length;
-  return { nominated, voted, total: t.traitors.length };
+  const decided = t.traitors.filter(id => P[id] && P[id].round === t.round && P[id].decide).length;
+  return { nominated, voted, decided, total: t.traitors.length };
 }
 async function setTurret(t){
+  // An optional recruit is asked first; a forced recruit simply becomes a Traitor after breakfast.
+  if (t.mode === "recruit" && t.optional && t.phase === "chosen" && t.victim && !t.accepted) t = { ...t, phase:"offer", phaseAt: Date.now() };
   if (isTrial()){ trialGame.turret = t; saveTrial(); renderWall(); return; }
   await db.doc("host/turret").set(t);
   await fanOut(t, true);
+  if (t.mode === "recruit" && t.victim){
+    const msg = t.phase === "offer" ? { round: t.round, phase:"offer", offer: true, at: Date.now() }
+      : t.phase === "closed" ? { round: t.round, phase:"closed" }
+      : { round: t.round, phase: t.accepted ? "accepted" : "recruited", offer: false };
+    await db.doc("turret/"+t.victim).set(msg);
+  }
+  if (t.phase === "closed" && t.declined) await db.doc("turret/"+t.declined).set({ round: t.round, phase:"closed" });
+}
+async function decideMode(t, mode){
+  await setTurret({ ...t, mode, phase:"nominate", phaseAt: Date.now() });
+}
+async function resolveOffer(t, accepted){
+  if (accepted) await setTurret({ ...t, phase:"chosen", accepted: true, phaseAt: Date.now() });
+  else {
+    // Declined: the night becomes a murder instead. The decliner can still be chosen.
+    if (!isTrial()) await db.doc("turret/"+t.victim).set({ round: t.round, phase:"declined" });
+    trialPicks = {};
+    await setTurret({ ...t, mode:"murder", phase:"nominate", phaseAt: Date.now(), declined: t.victim, victim: null, shortlist: [], tie: null, attempt: 1, randomPick: false, accepted: false });
+  }
 }
 async function fanOut(t, force){
   if (isTrial() || !t) return;
   const progress = turretProgress(t);
-  const key = JSON.stringify([t.round, t.phase, t.attempt, t.shortlist, t.victim, t.tie, progress]);
+  const key = JSON.stringify([t.round, t.mode, t.phase, t.attempt, t.shortlist, t.victim, t.tie, progress]);
   if (!force && key === lastFanKey) return;
   lastFanKey = key;
-  const view = { round: t.round, mode: t.mode || "murder", task: t.task || null, failed: !!t.failed, phase: t.phase, attempt: t.attempt || 1, candidates: t.candidates, shortlist: t.shortlist, victim: t.victim, tie: t.tie, firstTie: t.firstTie || null, randomPick: !!t.randomPick, progress };
+  const view = { round: t.round, optional: !!t.optional, declined: t.declined || null, accepted: !!t.accepted, mode: t.mode || "murder", task: t.task || null, failed: !!t.failed, phase: t.phase, attempt: t.attempt || 1, candidates: t.candidates, shortlist: t.shortlist, victim: t.victim, tie: t.tie, firstTie: t.firstTie || null, randomPick: !!t.randomPick, progress };
   await Promise.all(t.traitors.map(id => db.doc("turret/"+id).set(view)));
 }
 
 /* ----- recruitment ----- */
 // More than 10 players: the Traitors should number 3. 10 or fewer: 2.
 // When they fall short, the Turret recruits instead of murdering. Never with 6 or fewer left.
-function recruitDue(){
+// One Traitor left (with more than 6 players): they must recruit, and the recruit can't refuse.
+// 14+ players and exactly 2 Traitors: the Traitors may choose to recruit, and the recruit may say no.
+function recruitRule(){
   const R = roleMap(), living = livingIds();
   const n = living.length, tr = living.filter(id => R[id] === "traitor").length;
-  if (n <= 6 || tr < 1) return false;
-  return tr < (n > 10 ? 3 : 2);
+  if (tr === 1 && n > 6) return "forced";
+  if (tr === 2 && n >= 14) return "optional";
+  return null;
 }
+function recruitDue(){ return recruitRule() === "forced"; }
 const ownRecruited = () => isTrial() ? ((trialGame.recruited || {})[TRIAL_ME] || null) : myRecruitedRound;
 async function applyRecruit(id, round){
   if (isTrial()){
@@ -1576,11 +1611,14 @@ async function startTurret(){
   const candidates = living.filter(id => R[id] === "faithful");
   if (!traitors.length){ toast("There are no Traitors left in the game"); return; }
   if (!candidates.length){ toast("There are no Faithful left to murder"); return; }
-  const mode = recruitDue() ? "recruit" : "murder";
+  const rule = recruitRule();
+  const mode = rule === "forced" ? "recruit" : rule === "optional" ? "pending" : "murder";
   trialPicks = {};
   try {
-    await setTurret({ round: (turretState()?.round || 0) + 1, mode, phase:"nominate", phaseAt: Date.now(), traitors, candidates, shortlist: [], victim: null, tie: null });
-    toast(mode === "recruit" ? "Recruitment night: the Traitors will choose a new Traitor" : "The Traitors have been summoned to the Turret");
+    await setTurret({ round: (turretState()?.round || 0) + 1, mode, optional: rule === "optional", phase: mode === "pending" ? "decide" : "nominate", phaseAt: Date.now(), traitors, candidates, shortlist: [], victim: null, tie: null });
+    toast(mode === "recruit" ? "Only one Traitor is left, so they must recruit tonight"
+      : mode === "pending" ? "The Traitors may choose to murder or recruit tonight"
+      : "The Traitors have been summoned to the Turret");
   } catch(_){ toast("The Turret couldn't open. Try again."); }
 }
 function nominationsOf(t){
@@ -1666,7 +1704,27 @@ async function endMurder(){
   try { await putMurder({ ...m, phase:"closed" }); await expireShields(m.startedAt); } catch(_){ toast("The murder phase couldn't end. Try again."); }
 }
 
-/* ----- traitor actions ----- */
+/* ----- traitor and recruit actions ----- */
+async function submitDecide(choice){
+  const t = myTurretView(); if (!t || t.phase !== "decide") return;
+  if (isTrial()){ trialPicks[TRIAL_ME] = { round: t.round, decide: choice }; renderWall(); return; }
+  turretSaving = true; renderTurret(true);
+  try { await db.doc("tpicks/"+me).set({ round: t.round, decide: choice }); }
+  catch(_){ toast("That didn't go through. Try again."); }
+  finally { turretSaving = false; renderTurret(true); }
+}
+function myOfferView(){
+  if (isTrial()){ const t = trialGame.turret; return t && t.mode === "recruit" && t.victim === TRIAL_ME ? { round: t.round, phase: t.phase === "offer" ? "offer" : t.accepted ? "accepted" : t.phase === "closed" ? "closed" : "recruited" } : (t && t.declined === TRIAL_ME ? { round: t.round, phase:"declined" } : null); }
+  return myTurret && (myTurret.offer !== undefined || ["accepted","declined","recruited"].includes(myTurret.phase)) ? myTurret : null;
+}
+async function answerOffer(accept){
+  const o = myOfferView(); if (!o || o.phase !== "offer") return;
+  if (isTrial()){ trialPicks[TRIAL_ME] = { round: o.round, offer: accept ? "accept" : "decline" }; renderWall(); return; }
+  turretSaving = true; renderTurret(true);
+  try { await db.doc("tpicks/"+me).set({ round: o.round, offer: accept ? "accept" : "decline" }); }
+  catch(_){ toast("That didn't go through. Try again."); }
+  finally { turretSaving = false; renderTurret(true); }
+}
 async function submitNoms(){
   const t = myTurretView(); if (!t || t.phase !== "nominate" || !turretSel.length) return;
   const noms = turretSel.slice(0, 2);
@@ -1694,7 +1752,21 @@ async function turretAutomation(){
   turretBusy = true;
   try {
     const t = turretState(), now = Date.now();
-    if (t && (t.phase === "nominate" || t.phase === "vote")){
+    if (t && t.phase === "decide"){
+      const P = picksMap();
+      if (isTrial() && now >= t.phaseAt + TRIAL_PICK_MS) t.traitors.filter(id => id !== TRIAL_ME).forEach(id => {
+        if (!(P[id] && P[id].round === t.round && P[id].decide)) trialPicks[id] = { round: t.round, decide: Math.random() < 0.5 ? "recruit" : "murder" };
+      });
+      const picks = t.traitors.map(id => P[id] && P[id].round === t.round ? P[id].decide : null);
+      if (picks.every(Boolean) && picks.every(x => x === picks[0])) await decideMode(t, picks[0]);
+      else await fanOut(t, false);
+    } else if (t && t.phase === "offer"){
+      const P = picksMap(), p = P[t.victim];
+      if (isTrial() && t.victim !== TRIAL_ME && now >= t.phaseAt + TRIAL_PICK_MS * 2 && !(p && p.round === t.round && p.offer))
+        trialPicks[t.victim] = { round: t.round, offer: Math.random() < 0.7 ? "accept" : "decline" };
+      const ans = P[t.victim] && P[t.victim].round === t.round ? P[t.victim].offer : null;
+      if (ans === "accept" || ans === "decline") await resolveOffer(t, ans === "accept");
+    } else if (t && (t.phase === "nominate" || t.phase === "vote")){
       if (isTrial() && now >= t.phaseAt + TRIAL_PICK_MS){
         // Sample traitors make their picks on their own.
         t.traitors.filter(id => id !== TRIAL_ME).forEach(id => {
@@ -1784,8 +1856,16 @@ function renderTurret(force){
         return `<li><b>${escapeHtml(nameOf(id))}</b> → ${what}</li>`;
       }).join("");
       let body = "", acts = "";
-      if (t.phase === "nominate"){
-        body = `<p style="margin:0">${t.mode === "recruit" ? "Recruitment night. Each Traitor is picking 1 or 2 Faithful to shortlist for recruitment." : "Each Traitor is picking 1 or 2 Faithful for the shortlist."} ${pr.nominated} of ${pr.total} have chosen.</p><ul class="turret-list">${perTraitor}</ul>`;
+      if (t.phase === "decide"){
+        const P2 = picksMap();
+        const list = t.traitors.map(id => { const d = P2[id] && P2[id].round === t.round ? P2[id].decide : null; return `<li><b>${escapeHtml(nameOf(id))}</b> → ${d ? (d === "recruit" ? "Recruit" : "Murder") : '<span class="muted">deciding…</span>'}</li>`; }).join("");
+        body = `<p style="margin:0">With ${livingIds().length} players left and only 2 Traitors, the Traitors may recruit instead of murdering. If they agree, the night goes their way. If they're split, you decide.</p><ul class="turret-list">${list}</ul>`;
+        acts = `<button class="btn small danger" type="button" data-turret="decide-murder">Go with murder</button><button class="btn small" type="button" data-turret="decide-recruit">Go with recruit</button>`;
+      } else if (t.phase === "offer"){
+        body = `<div class="verdict">${escapeHtml(nameOf(t.victim))} has been offered a place among the Traitors.</div><p class="muted" style="margin:0">Waiting for their answer on their phone. If they decline, the Traitors murder someone instead.</p>`;
+        acts = `<button class="btn small" type="button" data-turret="offer-accept">They accepted</button><button class="btn small danger" type="button" data-turret="offer-decline">They declined</button>`;
+      } else if (t.phase === "nominate"){
+        body = `<p style="margin:0">${t.declined ? `${escapeHtml(nameOf(t.declined))} turned down the offer, so the Traitors must murder tonight. ` : ""}${t.mode === "recruit" ? (t.optional ? "The Traitors chose to recruit. Each is picking 1 or 2 Faithful to shortlist. The recruit will be able to say no." : "Only one Traitor is left, so they must recruit. The recruit can't refuse.") + " Each Traitor is picking 1 or 2 Faithful for the shortlist." : "Each Traitor is picking 1 or 2 Faithful for the shortlist."} ${pr.nominated} of ${pr.total} have chosen.</p><ul class="turret-list">${perTraitor}</ul>`;
         acts = `<button class="btn small" type="button" data-turret="close-noms" ${pr.nominated ? "" : "disabled"}>Close nominations</button>`;
       } else if (t.phase === "vote"){
         body = `<p style="margin:0">${(t.attempt || 1) > 1 ? `The first vote tied, so the Traitors are voting again between ${namesList(t.shortlist)}. Another tie and the victim is chosen at random.` : `Shortlist: ${namesList(t.shortlist)}.`} ${pr.voted} of ${pr.total} Traitors have voted.</p><ul class="turret-list">${perTraitor}</ul>`;
@@ -1816,6 +1896,21 @@ function renderTurret(force){
           ? `<span class="kicker">Breakfast</span><h3>${escapeHtml(nameOf(m.final.victim))} was murdered in the night</h3>`
           : `<span class="kicker">Breakfast</span><h3>Everyone made it through the night</h3>`)
       : `<span class="kicker">Breakfast${m.plain ? " · A murder in plain sight" : ""}</span><h3>Breakfast is being served</h3><p class="muted" style="margin:0">Watch the community screen to see who made it through the night.</p>`;
+  } else if (player && gameState().started && ownRole() !== "traitor" && myOfferView() && !allStatus()[myId()] && myOfferView().phase !== "closed"){
+    const o = myOfferView();
+    key = ["po", o.round, o.phase, turretSaving, revealed].join("|");
+    if (!revealed){
+      html = `<span class="kicker">A secret message</span><h3>Shield your screen</h3><p class="muted" style="margin:0">Make sure nobody can see, then open it.</p>
+        <div class="acts"><button class="btn solid" type="button" data-act="reveal">Open</button></div>`;
+    } else if (o.phase === "offer"){
+      html = `<span class="kicker">An offer in the night</span><h3>The Traitors want you</h3>
+        <p style="margin:0;max-width:46ch;margin-inline:auto">You've been chosen to join the Traitors. Accept, and you'll become a Traitor after breakfast and play to win with them. Decline, and you stay Faithful, but the Traitors will murder someone tonight. It could be you.</p>
+        <div class="acts"><button class="btn solid" type="button" data-turret="offer-yes" ${turretSaving ? "disabled" : ""}>Join the Traitors</button><button class="btn" type="button" data-turret="offer-no" ${turretSaving ? "disabled" : ""}>Stay Faithful</button></div>`;
+    } else if (o.phase === "accepted" || o.phase === "recruited"){
+      html = `<span class="kicker">An offer in the night</span><h3>${o.phase === "accepted" ? "You've accepted" : "You've been recruited"}</h3><p style="margin:0">You'll become a Traitor at the end of breakfast. Keep a straight face until then.</p>`;
+    } else if (o.phase === "declined"){
+      html = `<span class="kicker">An offer in the night</span><h3>You stayed Faithful</h3><p style="margin:0">The Traitors will murder someone tonight instead. Keep your answer to yourself.</p>`;
+    }
   } else if (player && gameState().started && ownRole() === "traitor"){
     const tv = myTurretView();
     if (tv && tv.phase !== "closed" && !allStatus()[myId()]){
@@ -1823,10 +1918,18 @@ function renderTurret(force){
       const selKey = tv.round + tv.phase + (tv.attempt || 1);
       if (selKey !== turretSelKey){ turretSelKey = selKey; turretSel = []; }
       const pr = tv.progress || { nominated:0, voted:0, total:1 };
-      key = ["pt", tv.round, tv.mode, tv.task, tv.failed, tv.phase, tv.attempt, JSON.stringify(mine), JSON.stringify(turretSel), turretSaving, JSON.stringify(pr), tv.victim, JSON.stringify(tv.tie), revealed].join("|");
+      key = ["pt", tv.round, tv.mode, tv.task, tv.failed, tv.phase, tv.declined, tv.attempt, JSON.stringify(mine), JSON.stringify(turretSel), turretSaving, JSON.stringify(pr), tv.victim, JSON.stringify(tv.tie), revealed].join("|");
       if (!revealed){
         html = `<span class="kicker">A secret message</span><h3>Shield your screen</h3><p class="muted" style="margin:0">Make sure nobody can see, then open it.</p>
           <div class="acts"><button class="btn solid" type="button" data-act="reveal">Open</button></div>`;
+      } else if (tv.phase === "offer"){
+        html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The offer has been made</h3><p style="margin:0"><b>${escapeHtml(nameOf(tv.victim))}</b> is deciding whether to join you. If they refuse, you'll murder someone instead.</p>`;
+      } else if (tv.phase === "decide"){
+        const mineDecide = mine && mine.decide;
+        html = mineDecide
+          ? `<span class="kicker">The Turret · Night ${tv.round}</span><h3>You chose to ${mineDecide === "recruit" ? "recruit" : "murder"}</h3><p style="margin:0">Waiting for your fellow Traitor (${(tv.progress || {}).decided || 0} of ${(tv.progress || {}).total || 2}). If you disagree, the host decides.</p>`
+          : `<span class="kicker">The Turret · Night ${tv.round}</span><h3>Murder or recruit?</h3><p style="margin:0">There are only two of you. Tonight you may recruit a Faithful to join you instead of murdering. A recruit can say no.</p>
+            <div class="acts"><button class="btn danger" type="button" data-turret="pick-murder" ${turretSaving ? "disabled" : ""}>Murder</button><button class="btn solid" type="button" data-turret="pick-recruit" ${turretSaving ? "disabled" : ""}>Recruit</button></div>`;
       } else if (tv.mode === "plain" && tv.phase === "task"){
         html = `<span class="kicker">Murder in plain sight</span><h3>Your task</h3>
           <div class="verdict role-traitor">${escapeHtml(tv.task || "")}</div>
@@ -1884,6 +1987,14 @@ $("turretStage").addEventListener("click", e => {
   else if (a === "close-noms" && t) closeNominations(t).catch(()=> toast("That didn't save. Try again."));
   else if (a === "close-vote" && t) closeTurretVote(t).catch(()=> toast("That didn't save. Try again."));
   else if (a === "start-murder") startMurder();
+  else if (a === "decide-murder" && t) decideMode(t, "murder").catch(()=> toast("That didn't save. Try again."));
+  else if (a === "decide-recruit" && t) decideMode(t, "recruit").catch(()=> toast("That didn't save. Try again."));
+  else if (a === "offer-accept" && t) resolveOffer(t, true).catch(()=> toast("That didn't save. Try again."));
+  else if (a === "offer-decline" && t) resolveOffer(t, false).catch(()=> toast("That didn't save. Try again."));
+  else if (a === "pick-murder") submitDecide("murder");
+  else if (a === "pick-recruit") submitDecide("recruit");
+  else if (a === "offer-yes") answerOffer(true);
+  else if (a === "offer-no") answerOffer(false);
   else if (a === "plain-start"){ plainMinutes = parseInt(($("plainMins") || {}).value, 10) || 20; startPlainSight(plainMinutes); }
   else if (a === "plain-cancel"){ plainSetup = false; renderWall(); }
   else if (a === "plain-confirm" && plainSel) resolvePlain(plainSel);
@@ -2126,20 +2237,35 @@ function firePortrait(id, tagText, tagClass){
   return `<figure class="fire-player">${bigPortrait(id, "fire-portrait")}<figcaption class="plaque">${escapeHtml(nameOf(id))}</figcaption>${tagText ? `<span class="role-tag ${tagClass || ""}">${tagText}</span>` : ""}</figure>`;
 }
 // Each screen times the finale from when it first saw it, so the reveals line up with the room.
-const FINALE_FIRST_MS = 3000, FINALE_STEP_MS = 5000, FINALE_WAIT_MS = 10000;
+// Each player is called first ("Ada is…"), then their role turns over after a pause.
+// The pauses grow as the reveal goes on, and a Traitor gets the longest wait of all.
+const FINALE_FIRST_MS = 4000, FINALE_WAIT_MS = 10000;
 const finaleSeen = {};
+function finaleSchedule(f){
+  const order = f.order || f.players, n = order.length, out = [];
+  let t = FINALE_FIRST_MS;
+  order.forEach((id, i) => {
+    const last = i === n - 1, traitor = f.roles[id] === "traitor";
+    const pause = traitor ? (last ? 14000 : 11000) : (last ? 9000 : 5000 + i * 1000);
+    out.push({ id, callAt: t, revealAt: t + pause, traitor });
+    t += pause + (traitor ? 7000 : 5000); // time to take each reveal in before the next name is called
+  });
+  const lastReveal = out.length ? out[out.length - 1].revealAt : 0;
+  const hasTraitor = out.some(x => x.traitor);
+  return { steps: out, winnerAt: lastReveal + FINALE_WAIT_MS + (hasTraitor ? 3000 : 0) };
+}
 function finaleProgress(f){
-  if (!f || f.phase !== "finale") return { shown: 0, done: false, winner: false };
+  if (!f || f.phase !== "finale") return { shown: 0, calling: null, done: false, winner: false };
   const order = f.order || f.players;
+  const sch = finaleSchedule(f);
   if (!finaleSeen[f.round]){
     // A device that opens the page long after the finale skips straight to the result.
-    const full = FINALE_FIRST_MS + (order.length - 1) * FINALE_STEP_MS + FINALE_WAIT_MS;
-    finaleSeen[f.round] = f.finaleAt && Date.now() - f.finaleAt > full + 20000 ? f.finaleAt : Date.now();
+    finaleSeen[f.round] = f.finaleAt && Date.now() - f.finaleAt > sch.winnerAt + 20000 ? f.finaleAt : Date.now();
   }
   const t = Date.now() - finaleSeen[f.round];
-  const shown = t < FINALE_FIRST_MS ? 0 : Math.min(order.length, Math.floor((t - FINALE_FIRST_MS) / FINALE_STEP_MS) + 1);
-  const lastAt = FINALE_FIRST_MS + (order.length - 1) * FINALE_STEP_MS;
-  return { shown, done: shown >= order.length, winner: t >= lastAt + FINALE_WAIT_MS, order };
+  const shown = sch.steps.filter(x => t >= x.revealAt).length;
+  const callingStep = sch.steps.find(x => t >= x.callAt && t < x.revealAt);
+  return { shown, calling: callingStep ? callingStep.id : null, done: shown >= order.length, winner: t >= sch.winnerAt, order };
 }
 function renderFire(force){
   const stage = $("fireStage");
@@ -2153,7 +2279,7 @@ function renderFire(force){
   const inGame = f.players.includes(myId());
   const choicesLive = host ? fireChoices(f) : {};
   const fp = finaleProgress(f);
-  const key = JSON.stringify([f.round, f.phase, f.decided, f.outcome, host, player, screen, mine, fireSaving, inGame, choicesLive, ownRole(), fp.shown, fp.winner]);
+  const key = JSON.stringify([f.round, f.phase, f.decided, f.outcome, host, player, screen, mine, fireSaving, inGame, choicesLive, ownRole(), fp.shown, fp.calling, fp.winner]);
   if (key === fireKey && !force) return;
   fireKey = key;
   const kick = `<span class="kicker">The Fire Pit · Round ${f.round}</span>`;
@@ -2208,15 +2334,22 @@ function renderFire(force){
       // One by one: every remaining portrait, each role turning over in turn.
       const shownIds = fp.order.slice(0, fp.shown);
       const latest = shownIds[shownIds.length - 1];
+      const latestTraitor = latest && f.roles[latest] === "traitor";
       const row = fp.order.map(id => {
         const isShown = shownIds.includes(id);
         const r = f.roles[id];
-        const html1 = firePortrait(id, isShown ? (r === "traitor" ? "TRAITOR" : "FAITHFUL") : "?", isShown && r === "traitor" ? "traitor" : "");
-        return id === latest ? html1.replace('class="fire-player"', 'class="fire-player just-revealed"') : html1;
+        let html1 = firePortrait(id, isShown ? (r === "traitor" ? "TRAITOR" : "FAITHFUL") : "?", isShown && r === "traitor" ? "traitor" : "");
+        if (id === fp.calling) html1 = html1.replace('class="fire-player"', 'class="fire-player spotlight"');
+        else if (id === latest && !fp.calling) html1 = html1.replace('class="fire-player"', `class="fire-player just-revealed${latestTraitor ? " traitor-reveal" : ""}"`);
+        else if (!isShown && fp.calling) html1 = html1.replace('class="fire-player"', 'class="fire-player dimmed"');
+        return html1;
       }).join("");
-      const lede = !fp.shown ? "The final players will now reveal who they really are."
-        : fp.done ? "Every role has been revealed."
-        : `${escapeHtml(nameOf(latest))} is… ${f.roles[latest] === "traitor" ? "a Traitor" : "Faithful"}.`;
+      let lede;
+      if (fp.calling) lede = `<span class="calling">${escapeHtml(nameOf(fp.calling))} is…</span>`;
+      else if (!fp.shown) lede = "The final players will now reveal who they really are.";
+      else if (latestTraitor) lede = `<span class="calling traitor-line">${escapeHtml(nameOf(latest))} is… a Traitor.</span>`;
+      else if (fp.done) lede = "Every role has been revealed.";
+      else lede = `${escapeHtml(nameOf(latest))} is… Faithful.`;
       html = `<span class="kicker">The end</span><h3>The truth is revealed</h3><div class="fire-row">${row}</div><p class="stage-lede">${lede}</p>`;
     } else {
       html = `<span class="kicker">The end</span><h3 class="final-headline ${tw ? "final-traitor" : "final-faithful"}">${headline}</h3>
