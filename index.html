@@ -248,6 +248,15 @@ html.screen-mode,body.screen-mode{height:100%}
 .fire-row.winners .fire-player{animation:fadein 2.4s ease-in both}
 .final-headline{animation:fadein 2s ease-in both}
 @media (prefers-reduced-motion:reduce){.fire-player.just-revealed .role-tag,.fire-player.just-revealed .stage-portrait,.fire-row.winners .fire-player,.final-headline{animation:none}}
+.host-card-form{display:grid;grid-template-columns:72px minmax(0,1fr) minmax(0,1fr) auto;gap:14px;align-items:end}
+@media (max-width:640px){.host-card-form{grid-template-columns:72px minmax(0,1fr)}.host-card-form .field:nth-of-type(2),.host-card-acts{grid-column:1/-1}}
+.host-card-thumb{width:72px;aspect-ratio:3/4;background:var(--oak);border:2px solid #b9b9b9;display:grid;place-items:center;overflow:hidden}
+.host-card-thumb img{width:100%;height:100%;object-fit:cover}
+.host-card-thumb .initials{font-size:1.4rem}
+.host-card-acts{display:flex;gap:10px;align-items:center}
+.card.host-card .portrait{background:linear-gradient(145deg,#f2f2f2,#b9b9b9 30%,#5f5f5f 60%,#c9c9c9 85%)}
+.card.host-card .plaque{border-color:#9a9a9a}
+.role-tag.host-tag{border-color:#b9b9b9;color:#e6e6e6;letter-spacing:.3em}
 .final-traitor{color:#f0b8b2}
 .final-faithful{color:var(--brass)}
 .screen-mode .fire-row{flex-wrap:nowrap}
@@ -380,6 +389,12 @@ html.screen-mode,body.screen-mode{height:100%}
     <section id="hostPanel" class="panel" hidden>
       <h3>Host's table</h3>
       <p class="muted" style="margin:0">Mark players as banished or murdered from each portrait. Change the entry codes here before your guests arrive.</p>
+      <form id="hostCardForm" class="host-card-form" autocomplete="off">
+        <div class="host-card-thumb" id="hostCardThumb"><span class="initials">?</span></div>
+        <div class="field"><label for="hostCardName">Your name on the wall</label><input id="hostCardName" maxlength="28" placeholder="e.g. Your Host"></div>
+        <div class="field"><label for="hostCardPhoto">Your portrait</label><input id="hostCardPhoto" type="file" accept="image/*"></div>
+        <div class="host-card-acts"><button class="btn small" type="submit">Save host portrait</button><button class="link" type="button" id="hostCardRemove">Remove</button></div>
+      </form>
       <form id="codesForm" class="row" autocomplete="off">
         <div class="field"><label for="hostCode">Host code</label><input id="hostCode" maxlength="24" required spellcheck="false"></div>
         <div class="field"><label for="playerCode">Player code</label><input id="playerCode" maxlength="24" required spellcheck="false"></div>
@@ -486,6 +501,7 @@ $("setupForm").addEventListener("submit", async e => {
 });
 function startSubs(){
   if (subsStarted) return; subsStarted = true;
+  db.doc("settings/host").onSnapshot(s => { liveHostCard = s.exists ? s.data() : null; renderWall(); paintHostThumb(); }, ()=>{});
   db.doc("settings/public").onSnapshot(s => {
     if (s.exists && s.data().player) codes = { ...codes, player: s.data().player };
     renderGameBar();
@@ -737,6 +753,7 @@ function enterHost(){
   $("editMeBtn").hidden = true;
   $("wallTitle").textContent = "The Players";
   $("wallSub").textContent = "You are hosting. Only you can see the controls under each portrait.";
+  paintHostThumb();
   $("hostCode").value = codes.host; $("playerCode").value = codes.player; $("trialCode").value = codes.trial; $("screenCode").value = codes.screen;
   show("wallView"); renderWall();
 }
@@ -781,6 +798,7 @@ function setTrialView(v){
   setScreenMode(v === "screen");
   $("hostPanel").hidden = v !== "host";
   $("codesForm").hidden = true;
+  paintHostThumb();
   $("editMeBtn").hidden = v !== "player" || !trialPlayers.some(p => p.id === TRIAL_ME);
   $("wallSub").textContent = v === "host"
     ? "Trial, host view. These are the controls you'll have on game night."
@@ -916,6 +934,52 @@ $("leaveBtn").addEventListener("click", ()=> {
 });
 
 /* ---------- wall ---------- */
+/* ---------- the host's own portrait on the wall ---------- */
+let liveHostCard = null, hostCardPhoto = null;
+const hostCardView = () => isTrial() ? (trialGame.hostCard || null) : liveHostCard;
+function buildHostCard(){
+  const h = hostCardView(); if (!h || !(h.name || h.photo)) return null;
+  const card = document.createElement("article");
+  card.className = "card host-card";
+  const frame = document.createElement("div"); frame.className = "portrait";
+  const canvas = document.createElement("div"); canvas.className = "canvas";
+  if (h.photo && /^data:image\/jpeg;base64,/.test(h.photo)){ const img = document.createElement("img"); img.src = h.photo; img.alt = "Portrait of the host"; canvas.appendChild(img); }
+  else { const sp = document.createElement("span"); sp.className = "initials"; sp.textContent = initials(h.name || "Host"); canvas.appendChild(sp); }
+  canvas.insertAdjacentHTML("beforeend", '<div class="vignette"></div>');
+  frame.appendChild(canvas);
+  const plaque = document.createElement("div"); plaque.className = "plaque"; plaque.textContent = h.name || "Your Host";
+  const tag = document.createElement("span"); tag.className = "role-tag host-tag"; tag.textContent = "HOST";
+  card.append(frame, plaque, tag);
+  return card;
+}
+function paintHostThumb(){
+  const el = $("hostCardThumb"); if (!el) return;
+  const h = hostCardView() || {};
+  const photo = hostCardPhoto || h.photo;
+  el.innerHTML = photo ? `<img alt="" src="${photo}">` : `<span class="initials">${escapeHtml(initials(h.name || "Host"))}</span>`;
+  if (!$("hostCardName").value && h.name) $("hostCardName").value = h.name;
+}
+async function saveHostCard(data){
+  if (isTrial()){ trialGame.hostCard = data; saveTrial(); renderWall(); paintHostThumb(); return; }
+  if (data) await db.doc("settings/host").set(data); else await db.doc("settings/host").delete();
+}
+$("hostCardPhoto").addEventListener("change", async e => {
+  const f = e.target.files?.[0]; if (!f) return;
+  try { hostCardPhoto = await toPortrait(f); paintHostThumb(); } catch(_){ toast("That photo couldn't be read. Try a JPG or PNG."); }
+});
+$("hostCardForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const cur = hostCardView() || {};
+  const name = $("hostCardName").value.trim().replace(/\s+/g, " ") || cur.name || "Your Host";
+  const photo = hostCardPhoto || cur.photo || null;
+  try { await saveHostCard({ name, photo, at: Date.now() }); hostCardPhoto = null; $("hostCardPhoto").value = ""; toast("Your portrait is on the wall"); }
+  catch(_){ toast("Your portrait didn't save. Try again."); }
+});
+$("hostCardRemove").addEventListener("click", async () => {
+  try { await saveHostCard(null); hostCardPhoto = null; $("hostCardName").value = ""; paintHostThumb(); toast("Host portrait removed"); }
+  catch(_){ toast("That didn't save. Try again."); }
+});
+
 function renderWall(){
   renderGameBar();
   renderVote(false);
@@ -939,12 +1003,14 @@ function renderWall(){
       <p class="muted">Add a player above, add 8 sample players at once, or join as a player to try the sign-up screen.</p></div>`
       : `<div class="empty"><div class="display" style="font-size:1.6rem">The wall stands empty</div>
       <p class="muted">Portraits appear here as players enter the player code, add their name and choose a photo.</p></div>`;
+    const hc0 = buildHostCard(); if (hc0) wall.prepend(hc0);
     applyScreenLayout();
     return;
   }
   const host = role === "host" || (isTrial() && trialView === "host");
   const showYou = role === "player" || (isTrial() && trialView === "player");
   wall.innerHTML = "";
+  const hc = buildHostCard(); if (hc) wall.appendChild(hc);
   const ordered = players.filter(p => !statuses[p.id]).concat(players.filter(p => statuses[p.id]));
   ordered.forEach((p,i) => {
     const s = statuses[p.id];
