@@ -466,14 +466,14 @@ async function boot(){
   if (role === "trial") enterTrial();
   if (window.FB_MISSING_CONFIG){ if (role !== "trial") $("gateError").textContent = "This site isn't connected to its database yet. Paste your Firebase settings into index.html (see SETUP.md)."; return; }
   await fbReady();
-  if (window.FB.error){ if (role !== "trial") gateUnavailable(); return; }
+  if (window.FB.error){ if (role !== "trial") gateUnavailable(window.FB.error, window.FB.code); return; }
   db = window.FB.db; me = window.FB.uid;
   try {
     const [setup, host, mem] = await Promise.all([db.doc("meta/setup").get(), db.doc("hosts/"+me).get(), db.doc("members/"+me).get()]);
     needsSetup = !setup.exists;
     isOwner = host.exists;
     memberKind = mem.exists ? mem.data().kind : null;
-  } catch(_){ gateUnavailable(); return; }
+  } catch(e){ console.error("Database read failed", e); gateUnavailable("db", (e && e.code) || (e && e.message) || ""); return; }
   if (needsSetup){ showSetup(); return; }
   const allowed = { host: isOwner, player: memberKind === "player", screen: memberKind === "screen" || isOwner, trial: true };
   if (role && role !== "trial" && !allowed[role]){ role = null; store.del("traitors.role"); }
@@ -482,8 +482,23 @@ async function boot(){
   else if (role === "player") routePlayer();
   else if (role === "screen") enterScreen();
 }
-function gateUnavailable(){
-  $("gateError").textContent = "The castle can't be reached right now. Check your internet connection and reload the page.";
+let lastProblem = null;
+function gateUnavailable(kind, code){
+  if (kind) lastProblem = { kind, code: String(code || "") };
+  const p = lastProblem || { kind: "", code: "" }, c = p.code;
+  let msg;
+  if (c.includes("admin-restricted-operation") || c.includes("operation-not-allowed"))
+    msg = "Anonymous sign-in is turned off. In Firebase, open Authentication → Sign-in method → Anonymous, switch it on and save.";
+  else if (c.includes("unauthorized-domain") || c.includes("requests-from-referer") || c.includes("api-key"))
+    msg = "This web address isn't allowed yet. In Firebase, open Authentication → Settings → Authorized domains and add " + location.hostname + ".";
+  else if (c.includes("permission-denied") || c.includes("insufficient permissions"))
+    msg = "The database refused the request. In Firebase, open Firestore Database → Rules, paste the castle rules again and press Publish.";
+  else if (c.includes("not-found") || c.includes("NOT_FOUND") || c.includes("does not exist"))
+    msg = "The database doesn't exist yet. In Firebase, open Firestore Database and press Create database.";
+  else if (c.includes("unavailable") || c.includes("network"))
+    msg = "The database didn't answer. Reload the page. If this keeps happening, check that Firestore Database has been created.";
+  else msg = "The castle can't be reached right now. Reload the page.";
+  $("gateError").textContent = msg + (c ? " (Error: " + c + ")" : "");
 }
 function showSetup(){
   $("gate").hidden = true; $("setup").hidden = false;
@@ -2754,8 +2769,8 @@ if (Object.values(FIREBASE_CONFIG).some(v => !v || v === "PASTE-HERE")){
     const db = { doc: docRef, collection: colRef };
     let fired = false;
     onAuthStateChanged(auth, u => { if (u && !fired){ fired = true; done({ db, uid: u.uid }); } });
-    signInAnonymously(auth).catch(() => { if (!fired){ fired = true; done({ error: "auth" }); } });
-  } catch(_){ done({ error: "init" }); }
+    signInAnonymously(auth).catch(e => { console.error("Sign-in failed", e); if (!fired){ fired = true; done({ error: "auth", code: (e && e.code) || "" }); } });
+  } catch(e){ console.error("Firebase setup failed", e); done({ error: "init", code: (e && e.code) || (e && e.message) || "" }); }
 }
 </script>
 </body>
