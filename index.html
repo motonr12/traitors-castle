@@ -248,6 +248,24 @@ html.screen-mode,body.screen-mode{height:100%}
 .fire-row.winners .fire-player{animation:fadein 2.4s ease-in both}
 .final-headline{animation:fadein 2s ease-in both}
 @media (prefers-reduced-motion:reduce){.fire-player.just-revealed .role-tag,.fire-player.just-revealed .stage-portrait,.fire-row.winners .fire-player,.final-headline{animation:none}}
+.host-card-form{display:grid;grid-template-columns:72px minmax(0,1fr) minmax(0,1fr) auto;gap:14px;align-items:end}
+@media (max-width:640px){.host-card-form{grid-template-columns:72px minmax(0,1fr)}.host-card-form .field:nth-of-type(2),.host-card-acts{grid-column:1/-1}}
+.host-card-thumb{width:72px;aspect-ratio:3/4;background:var(--oak);border:2px solid #b9b9b9;display:grid;place-items:center;overflow:hidden}
+.host-card-thumb img{width:100%;height:100%;object-fit:cover}
+.host-card-thumb .initials{font-size:1.4rem}
+.host-card-acts{display:flex;gap:10px;align-items:center}
+.host-corner{display:flex;justify-content:flex-end;margin:-8px 0 14px}
+.host-chip{display:flex;align-items:center;gap:10px;padding:6px 14px 6px 6px;border:1px solid #9a9a9a;background:linear-gradient(#1e1e1c,#141412);max-width:min(320px,100%);min-width:0}
+.host-chip-frame{flex:none;width:44px;aspect-ratio:3/4;padding:3px;background:linear-gradient(145deg,#f2f2f2,#b9b9b9 30%,#5f5f5f 60%,#c9c9c9 85%);display:grid;place-items:center;overflow:hidden}
+.host-chip-frame img{width:100%;height:100%;object-fit:cover;display:block}
+.host-chip-frame .initials{font-size:1rem;color:#cfcfcf}
+.host-chip-text{display:flex;flex-direction:column;min-width:0}
+.host-chip-kicker{font-family:var(--font-display);font-size:.68rem;letter-spacing:.28em;color:#cfcfcf}
+.host-chip-name{font-family:var(--font-display);font-size:1.05rem;letter-spacing:.06em;color:var(--parchment);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen-mode .host-corner{margin:0;flex:none}
+.card.host-card .portrait{background:linear-gradient(145deg,#f2f2f2,#b9b9b9 30%,#5f5f5f 60%,#c9c9c9 85%)}
+.card.host-card .plaque{border-color:#9a9a9a}
+.role-tag.host-tag{border-color:#b9b9b9;color:#e6e6e6;letter-spacing:.3em}
 .final-traitor{color:#f0b8b2}
 .final-faithful{color:var(--brass)}
 .screen-mode .fire-row{flex-wrap:nowrap}
@@ -282,6 +300,7 @@ html.screen-mode,body.screen-mode{height:100%}
         <label for="codeInput">Entry code</label>
         <input id="codeInput" class="code-input" maxlength="24" required spellcheck="false" autocapitalize="characters">
       </div>
+      <p id="gateStatus" class="muted" style="margin:0;text-align:center" hidden></p>
       <p id="gateError" class="error" role="alert"></p>
       <button class="btn solid" type="submit" id="gateBtn">Enter the castle</button>
     </form>
@@ -370,6 +389,7 @@ html.screen-mode,body.screen-mode{height:100%}
         <div><b id="tMur">0</b><span>Murdered</span></div>
       </div>
     </div>
+    <aside id="hostCorner" class="host-corner" hidden></aside>
     <div id="wall" class="wall"></div>
 
     <div class="bar">
@@ -380,6 +400,12 @@ html.screen-mode,body.screen-mode{height:100%}
     <section id="hostPanel" class="panel" hidden>
       <h3>Host's table</h3>
       <p class="muted" style="margin:0">Mark players as banished or murdered from each portrait. Change the entry codes here before your guests arrive.</p>
+      <form id="hostCardForm" class="host-card-form" autocomplete="off">
+        <div class="host-card-thumb" id="hostCardThumb"><span class="initials">?</span></div>
+        <div class="field"><label for="hostCardName">Your name on the wall</label><input id="hostCardName" maxlength="28" placeholder="e.g. Your Host"></div>
+        <div class="field"><label for="hostCardPhoto">Your portrait</label><input id="hostCardPhoto" type="file" accept="image/*"></div>
+        <div class="host-card-acts"><button class="btn small" type="submit">Save host portrait</button><button class="link" type="button" id="hostCardRemove">Remove</button></div>
+      </form>
       <form id="codesForm" class="row" autocomplete="off">
         <div class="field"><label for="hostCode">Host code</label><input id="hostCode" maxlength="24" required spellcheck="false"></div>
         <div class="field"><label for="playerCode">Player code</label><input id="playerCode" maxlength="24" required spellcheck="false"></div>
@@ -440,15 +466,18 @@ async function boot(){
   loadTrial();
   if (role === "trial") enterTrial();
   if (window.FB_MISSING_CONFIG){ if (role !== "trial") $("gateError").textContent = "This site isn't connected to its database yet. Paste your Firebase settings into index.html (see SETUP.md)."; return; }
-  await fbReady();
-  if (window.FB.error){ if (role !== "trial") gateUnavailable(); return; }
+  showConnecting(true);
+  const timedOut = await Promise.race([fbReady().then(() => false), new Promise(r => setTimeout(() => r(true), 30000))]);
+  showConnecting(false);
+  if (timedOut){ if (role !== "trial") gateUnavailable("stuck", "stuck-at-" + (window.FB_STAGE || "start")); return; }
+  if (window.FB.error){ if (role !== "trial") gateUnavailable(window.FB.error, window.FB.code); return; }
   db = window.FB.db; me = window.FB.uid;
   try {
     const [setup, host, mem] = await Promise.all([db.doc("meta/setup").get(), db.doc("hosts/"+me).get(), db.doc("members/"+me).get()]);
     needsSetup = !setup.exists;
     isOwner = host.exists;
     memberKind = mem.exists ? mem.data().kind : null;
-  } catch(_){ gateUnavailable(); return; }
+  } catch(e){ console.error("Database read failed", e); gateUnavailable("db", (e && e.code) || (e && e.message) || ""); return; }
   if (needsSetup){ showSetup(); return; }
   const allowed = { host: isOwner, player: memberKind === "player", screen: memberKind === "screen" || isOwner, trial: true };
   if (role && role !== "trial" && !allowed[role]){ role = null; store.del("traitors.role"); }
@@ -457,8 +486,40 @@ async function boot(){
   else if (role === "player") routePlayer();
   else if (role === "screen") enterScreen();
 }
-function gateUnavailable(){
-  $("gateError").textContent = "The castle can't be reached right now. Check your internet connection and reload the page.";
+let connecting = false;
+function showConnecting(on){
+  connecting = on;
+  const el = $("gateStatus"); if (!el) return;
+  el.hidden = !on;
+  const stage = window.FB_STAGE;
+  el.textContent = !on ? "" : stage === "signing-in" ? "Connecting to the castle… (signing in)" : stage === "starting" ? "Connecting to the castle… (starting)" : "Connecting to the castle… (loading)";
+}
+window.addEventListener("fb-stage", () => { if (connecting) showConnecting(true); });
+let lastProblem = null;
+function gateUnavailable(kind, code){
+  if (kind) lastProblem = { kind, code: String(code || "") };
+  const p = lastProblem || { kind: "", code: "" }, c = p.code;
+  let msg;
+  if (c.startsWith("load-failed"))
+    msg = "Your browser couldn't download the code that connects to the database. Turn off any content or ad blocker for this site, or open the link in Safari or Chrome directly (not inside another app), then reload.";
+  else if (c === "stuck-at-loading")
+    msg = "The connection code is taking too long to download. Turn off any content or ad blocker, try switching between Wi-Fi and mobile data, then reload.";
+  else if (c === "sign-in-timeout" || c === "stuck-at-signing-in")
+    msg = "Firebase didn't answer the sign-in. Check that Anonymous sign-in is switched on in Firebase (Authentication → Sign-in method), then reload.";
+  else if (c.startsWith("stuck-at"))
+    msg = "The castle got stuck while connecting. Reload the page.";
+  else if (c.includes("admin-restricted-operation") || c.includes("operation-not-allowed"))
+    msg = "Anonymous sign-in is turned off. In Firebase, open Authentication → Sign-in method → Anonymous, switch it on and save.";
+  else if (c.includes("unauthorized-domain") || c.includes("requests-from-referer") || c.includes("api-key"))
+    msg = "This web address isn't allowed yet. In Firebase, open Authentication → Settings → Authorized domains and add " + location.hostname + ".";
+  else if (c.includes("permission-denied") || c.includes("insufficient permissions"))
+    msg = "The database refused the request. In Firebase, open Firestore Database → Rules, paste the castle rules again and press Publish.";
+  else if (c.includes("not-found") || c.includes("NOT_FOUND") || c.includes("does not exist"))
+    msg = "The database doesn't exist yet. In Firebase, open Firestore Database and press Create database.";
+  else if (c.includes("unavailable") || c.includes("network"))
+    msg = "The database didn't answer. Reload the page. If this keeps happening, check that Firestore Database has been created.";
+  else msg = "The castle can't be reached right now. Reload the page." + (c ? "" : " (Error: not-connected-" + (window.FB_STAGE || "never-started") + ")");
+  $("gateError").textContent = msg + (c ? " (Error: " + c + ")" : "");
 }
 function showSetup(){
   $("gate").hidden = true; $("setup").hidden = false;
@@ -486,6 +547,7 @@ $("setupForm").addEventListener("submit", async e => {
 });
 function startSubs(){
   if (subsStarted) return; subsStarted = true;
+  db.doc("settings/host").onSnapshot(s => { liveHostCard = s.exists ? s.data() : null; renderWall(); paintHostThumb(); }, ()=>{});
   db.doc("settings/public").onSnapshot(s => {
     if (s.exists && s.data().player) codes = { ...codes, player: s.data().player };
     renderGameBar();
@@ -516,6 +578,7 @@ function startSubs(){
     db.doc("host/plan").onSnapshot(s => { murderPlan = s.exists ? s.data() : null; }, ()=>{});
     db.doc("host/mips").onSnapshot(s => { hostMips = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.collection("cpicks").onSnapshot(s => { cpicks = {}; s.docs.forEach(d => { if (d.exists) cpicks[d.id] = d.data(); }); }, ()=>{});
+    db.doc("host/finale").onSnapshot(s => { hostFinale = s.exists ? s.data() : null; }, ()=>{});
     db.collection("fpicks").onSnapshot(s => { fpicks = {}; s.docs.forEach(d => { if (d.exists) fpicks[d.id] = d.data(); }); renderFire(true); }, ()=>{});
     db.collection("powers").onSnapshot(s => { hostPowers = {}; s.docs.forEach(d => { if (d.exists) hostPowers[d.id] = d.data(); }); renderWall(); }, ()=>{});
     db.collection("tpicks").onSnapshot(s => { tpicks = {}; s.docs.forEach(d => { if (d.exists) tpicks[d.id] = d.data(); }); renderTurret(true); }, ()=>{});
@@ -603,6 +666,7 @@ async function clearNightData(){
   await Promise.all(Object.keys(tpicks).map(id => db.doc("tpicks/"+id).delete().catch(()=>{})));
   await Promise.all(Object.keys(hostPowers).map(id => db.doc("powers/"+id).delete().catch(()=>{})));
   await db.doc("game/firepit").delete().catch(()=>{});
+  await db.doc("host/finale").delete().catch(()=>{});
   await Promise.all(Object.keys(fpicks).map(id => db.doc("fpicks/"+id).delete().catch(()=>{})));
 }
 async function endGame(){
@@ -699,7 +763,10 @@ $("gateForm").addEventListener("submit", async e => {
   $("gateError").textContent = "";
   if (!c) return;
   if (window.FB_MISSING_CONFIG){ $("gateError").textContent = "This site isn't connected to its database yet. See SETUP.md."; return; }
-  if (!db){ gateUnavailable(); return; }
+  if (!db){
+    if (connecting){ $("gateError").textContent = "Still connecting to the castle. Wait a moment, then try again."; return; }
+    gateUnavailable(); return;
+  }
   const btn = $("gateBtn"); btn.disabled = true;
   // Each attempt is checked by the database's security rules against the real codes.
   const tryWrite = async (path, data) => { try { await db.doc(path).set(data); return true; } catch(_){ return false; } };
@@ -737,6 +804,7 @@ function enterHost(){
   $("editMeBtn").hidden = true;
   $("wallTitle").textContent = "The Players";
   $("wallSub").textContent = "You are hosting. Only you can see the controls under each portrait.";
+  paintHostThumb();
   $("hostCode").value = codes.host; $("playerCode").value = codes.player; $("trialCode").value = codes.trial; $("screenCode").value = codes.screen;
   show("wallView"); renderWall();
 }
@@ -781,6 +849,7 @@ function setTrialView(v){
   setScreenMode(v === "screen");
   $("hostPanel").hidden = v !== "host";
   $("codesForm").hidden = true;
+  paintHostThumb();
   $("editMeBtn").hidden = v !== "player" || !trialPlayers.some(p => p.id === TRIAL_ME);
   $("wallSub").textContent = v === "host"
     ? "Trial, host view. These are the controls you'll have on game night."
@@ -916,6 +985,65 @@ $("leaveBtn").addEventListener("click", ()=> {
 });
 
 /* ---------- wall ---------- */
+/* ---------- the host's own portrait on the wall ---------- */
+let liveHostCard = null, hostCardPhoto = null;
+const hostCardView = () => isTrial() ? (trialGame.hostCard || null) : liveHostCard;
+function buildHostCard(){
+  const h = hostCardView(); if (!h || !(h.name || h.photo)) return null;
+  const card = document.createElement("article");
+  card.className = "card host-card";
+  const frame = document.createElement("div"); frame.className = "portrait";
+  const canvas = document.createElement("div"); canvas.className = "canvas";
+  if (h.photo && /^data:image\/jpeg;base64,/.test(h.photo)){ const img = document.createElement("img"); img.src = h.photo; img.alt = "Portrait of the host"; canvas.appendChild(img); }
+  else { const sp = document.createElement("span"); sp.className = "initials"; sp.textContent = initials(h.name || "Host"); canvas.appendChild(sp); }
+  canvas.insertAdjacentHTML("beforeend", '<div class="vignette"></div>');
+  frame.appendChild(canvas);
+  const plaque = document.createElement("div"); plaque.className = "plaque"; plaque.textContent = h.name || "Your Host";
+  const tag = document.createElement("span"); tag.className = "role-tag host-tag"; tag.textContent = "HOST";
+  card.append(frame, plaque, tag);
+  return card;
+}
+function renderHostCorner(){
+  const el = $("hostCorner"), h = hostCardView();
+  const wallShown = !$("wall").hidden && !(isScreenView() && (murderActive() || chainLive()));
+  if (!h || !(h.name || h.photo) || !wallShown || $("wallView").hidden){ el.hidden = true; return; }
+  el.hidden = false;
+  const photo = h.photo && /^data:image\/jpeg;base64,/.test(h.photo) ? h.photo : null;
+  const key = (h.name || "") + "|" + (photo ? photo.length : 0);
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.innerHTML = `<div class="host-chip"><div class="host-chip-frame">${photo ? `<img alt="Portrait of the host" src="${photo}">` : `<span class="initials">${escapeHtml(initials(h.name || "Host"))}</span>`}</div>
+    <div class="host-chip-text"><span class="host-chip-kicker">Your host</span><span class="host-chip-name"></span></div></div>`;
+  el.querySelector(".host-chip-name").textContent = h.name || "Your Host";
+}
+function paintHostThumb(){
+  const el = $("hostCardThumb"); if (!el) return;
+  const h = hostCardView() || {};
+  const photo = hostCardPhoto || h.photo;
+  el.innerHTML = photo ? `<img alt="" src="${photo}">` : `<span class="initials">${escapeHtml(initials(h.name || "Host"))}</span>`;
+  if (!$("hostCardName").value && h.name) $("hostCardName").value = h.name;
+}
+async function saveHostCard(data){
+  if (isTrial()){ trialGame.hostCard = data; saveTrial(); renderWall(); paintHostThumb(); return; }
+  if (data) await db.doc("settings/host").set(data); else await db.doc("settings/host").delete();
+}
+$("hostCardPhoto").addEventListener("change", async e => {
+  const f = e.target.files?.[0]; if (!f) return;
+  try { hostCardPhoto = await toPortrait(f); paintHostThumb(); } catch(_){ toast("That photo couldn't be read. Try a JPG or PNG."); }
+});
+$("hostCardForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const cur = hostCardView() || {};
+  const name = $("hostCardName").value.trim().replace(/\s+/g, " ") || cur.name || "Your Host";
+  const photo = hostCardPhoto || cur.photo || null;
+  try { await saveHostCard({ name, photo, at: Date.now() }); hostCardPhoto = null; $("hostCardPhoto").value = ""; toast("Your portrait is on the wall"); }
+  catch(_){ toast("Your portrait didn't save. Try again."); }
+});
+$("hostCardRemove").addEventListener("click", async () => {
+  try { await saveHostCard(null); hostCardPhoto = null; $("hostCardName").value = ""; paintHostThumb(); toast("Host portrait removed"); }
+  catch(_){ toast("That didn't save. Try again."); }
+});
+
 function renderWall(){
   renderGameBar();
   renderVote(false);
@@ -925,6 +1053,7 @@ function renderWall(){
   renderPlainStage();
   renderChain(false);
   const wall = $("wall");
+  queueMicrotask(renderHostCorner);
   if (isScreenView() && murderActive()){ delete wall.dataset.chround; renderMurderWall(wall); applyScreenLayout(); return; }
   delete wall.dataset.mround;
   if (isScreenView() && chainLive()){ renderChainWall(wall); applyScreenLayout(); return; }
@@ -1048,7 +1177,7 @@ $("resetYes").addEventListener("click", async ()=> {
 /* ---------- revealed roles and fellow traitors ---------- */
 function revealedRole(id){
   const fp = fireState();
-  if (fp && fp.phase === "finale" && fp.roles && fp.roles[id] && finaleProgress(fp).winner) return fp.roles[id];
+  if (fp && fp.phase === "finale"){ if (fp.allRoles && fp.allRoles[id]) return fp.allRoles[id]; if (fp.revealed && fp.revealed[id]) return fp.revealed[id]; }
   if (isTrial()) return trialStatus[id] && !(trialGame.hidden || {})[id] ? (trialGame.roles[id] || null) : null;
   return statuses[id] ? (statusRoles[id] || null) : null;
 }
@@ -1184,7 +1313,8 @@ async function finishVote(v){
   const max = Math.max(0, ...Object.values(counts));
   const leaders = Object.keys(counts).filter(k => counts[k] === max);
   let outcome = !max ? { type:"none" } : leaders.length === 1 ? { type:"banish", id: leaders[0], votes: max } : { type:"tie", ids: leaders, votes: max };
-  if (v.isRevote && outcome.type !== "banish"){
+  if (v.endgame && v.isRevote && outcome.type === "none") outcome = { type:"tie", ids: v.candidates || [], votes: 0 };
+  if (v.isRevote && !v.endgame && outcome.type !== "banish"){
     // A second tie: the tied players are safe and fate picks someone else.
     const safe = outcome.type === "tie" ? leaders : (v.candidates || []);
     const pool = v.voters.filter(id => !safe.includes(id));
@@ -1260,7 +1390,7 @@ function verdictHtml(v, showRole){
   if (o.type === "none") return `<div class="verdict">No votes were cast. Nobody is banished.</div>`;
   if (o.type === "tie" && !o.decided){
     const names = o.ids.map(id => escapeHtml(nameOf(id))).join(" and ");
-    return `<div class="verdict">It's a tie between ${names}, with ${o.votes} vote${o.votes > 1 ? "s" : ""} each.</div><p class="muted" style="margin:0">The host may call a revote between them.</p>`;
+    return `<div class="verdict">It's a tie between ${names}${o.votes ? `, with ${o.votes} vote${o.votes > 1 ? "s" : ""} each` : ""}.</div><p class="muted" style="margin:0">${v.endgame ? "In the Fire Pit there is no luck of the draw. They face a revote until someone is chosen." : "The host may call a revote between them."}</p>`;
   }
   const name = escapeHtml(nameOf(o.id));
   let html = o.random
@@ -1304,7 +1434,7 @@ function renderVote(force){
       if (left <= 0){
         body = `<p class="muted" style="margin:0">Time's up. ${screen ? "Get ready to reveal your votes." : player && !host ? "Watch the community screen. When it calls your name, reveal your vote here." : "Locking in the votes…"}</p>`;
       } else if (screen){
-        body = `<p class="stage-lede">${v.isRevote ? `Revote: choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}. If it ties again, both are safe and fate picks someone else.` : "Players, cast your vote on your phone. Who do you believe is a Traitor?"}</p>`;
+        body = `<p class="stage-lede">${v.isRevote ? `Revote: choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}. ${v.endgame ? "If it ties again, you'll vote again." : "If it ties again, both are safe and fate picks someone else."}` : "Players, cast your vote on your phone. Who do you believe is a Traitor?"}</p>`;
       } else if (host){
         body = `<p style="margin:0">${votesIn(v)} of ${v.voters.length} votes are in.</p>
           <div class="acts"><button class="btn small" type="button" data-vote="close">Close voting now</button></div>`;
@@ -1428,6 +1558,7 @@ function applyScreenLayout(){
   const screen = isScreenView() && !$("wallView").hidden;
   const staged = screen && (voteOnStage() || fireOnStage() || (gameState().started && plainAnnounced())) && !murderActive();
   wall.hidden = staged; head.hidden = staged;
+  renderHostCorner();
   if (!screen){ wall.style.gridTemplateColumns = ""; wall.style.removeProperty("--fs"); return; }
   if (staged) return;
   const n = murderActive() ? Math.max(1, murderState().total) : chainLive() ? Math.max(1, chainState().total) : wall.querySelectorAll(".card").length;
@@ -1671,9 +1802,11 @@ async function startMurder(){
   // A shield means nobody dies: everyone, the target included, is revealed as safe.
   const chainPool = t.mode === "chain" && chainState() ? chainState().remaining.filter(id => living.includes(id)) : null;
   const field = chainPool && (!victim || chainPool.includes(victim)) ? chainPool : living;
-  const pool = shielded ? shuffle(field.slice()) : shuffle(field.filter(id => id !== victim));
-  const finalCount = shielded ? 3 : 2;
-  const finalSafe = pool.slice(-finalCount), rest = pool.slice(0, Math.max(0, pool.length - finalCount));
+  const shieldSave = shielded && !recruit && !failed && victim && field.includes(victim);
+  // The shielded target (if any) is always the very last portrait to appear.
+  const pool = shieldSave ? shuffle(field.filter(id => id !== victim)) : shielded ? shuffle(field.slice()) : shuffle(field.filter(id => id !== victim));
+  const finalCount = shieldSave ? 2 : shielded ? 3 : 2;
+  const finalSafe = pool.slice(-finalCount).concat(shieldSave ? [victim] : []), rest = pool.slice(0, Math.max(0, pool.length - finalCount));
   // After a Safety Chain the unsafe players arrive one at a time before the final three.
   const batches = field === chainPool ? rest.map(id => ({ ids: [id] })) : buildBatches(rest);
   const now = Date.now();
@@ -2027,7 +2160,10 @@ function renderMurderWall(wall){
     const card = document.createElement("article");
     card.className = "card breakfast" + (murdered ? " out" : "");
     card.dataset.pid = id;
-    card.style.animationDelay = (k++ * 0.8) + "s";
+    const finalIds = m.final ? m.final.safe.concat(m.final.victim ? [m.final.victim] : []) : [];
+    const isLastFinal = finalIds.length && id === finalIds[finalIds.length - 1];
+    card.style.animationDelay = (isLastFinal && !murdered ? k++ * 0.8 + 1.6 : k++ * 0.8) + "s";
+    if (isLastFinal && !murdered) card.style.animationDuration = "4.5s";
     const frame = document.createElement("div"); frame.className = "portrait";
     const canvas = document.createElement("div"); canvas.className = "canvas";
     if (p.photo && /^data:image\/jpeg;base64,/.test(p.photo)){ const img = document.createElement("img"); img.src = p.photo; img.alt = "Portrait of " + (p.name || "a player"); canvas.appendChild(img); }
@@ -2054,7 +2190,7 @@ function finalFadeDone(m){
   if (!finalSeenAt[key]) finalSeenAt[key] = Date.now();
   const count = m.final.safe.length + (m.final.victim ? 1 : 0);
   const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const wait = reduce ? 0 : (count - 1) * 800 + (m.final.victim ? 4500 : 3000) + 300;
+  const wait = reduce ? 0 : (count - 1) * 800 + (m.final.victim ? 4500 : 1600 + 4500) + 300;
   return Date.now() >= finalSeenAt[key] + wait;
 }
 let lastBannerHtml = "";
@@ -2196,14 +2332,64 @@ async function closeFire(f){
   const outcome = Object.values(choices).includes("banish") ? "banish" : "end";
   await putFire({ ...f, phase:"result", choices, decided: Object.keys(choices).length, outcome });
 }
+// The final reveal is led by the players. The host keeps the order (Faithful first, Traitors last)
+// and the roles in host/finale; game/firepit only ever holds what the room has already seen.
+const FIN_PAUSE_F = 4000, FIN_PAUSE_T = 8000, FIN_HOLD_F = 6000, FIN_HOLD_T = 9000, FINALE_WAIT_MS = 10000, FIN_TRIAL_MS = 2500;
+let hostFinale = null;
+const finalePlan = () => isTrial() ? (trialGame.finalePlan || null) : hostFinale;
 async function fireFinale(round, living){
-  const R = roleMap(), roles = {};
-  allPlayers().forEach(p => { if (R[p.id]) roles[p.id] = R[p.id]; });
-  living.forEach(id => { roles[id] = R[id] || "faithful"; });
-  const traitorsLeft = living.filter(id => roles[id] === "traitor");
-  // Faithful first, any Traitors last, each group in random order.
-  const order = shuffle(living.filter(id => roles[id] !== "traitor")).concat(shuffle(traitorsLeft.slice()));
-  await putFire({ round, phase:"finale", players: living, roles, traitorsLeft, order, finaleAt: Date.now(), winner: traitorsLeft.length ? "traitors" : "faithful" });
+  const R = roleMap(), allRoles = {};
+  allPlayers().forEach(p => { if (R[p.id]) allRoles[p.id] = R[p.id]; });
+  living.forEach(id => { allRoles[id] = R[id] || "faithful"; });
+  const traitorsLeft = living.filter(id => allRoles[id] === "traitor");
+  const order = shuffle(living.filter(id => allRoles[id] !== "traitor")).concat(shuffle(traitorsLeft.slice()));
+  const plan = { round, order, allRoles, traitorsLeft, winner: traitorsLeft.length ? "traitors" : "faithful" };
+  const now = Date.now();
+  trialFpicks = {};
+  if (isTrial()) trialGame.finalePlan = plan;
+  else { await db.doc("host/finale").set(plan); hostFinale = plan; }
+  await putFire({ round, phase:"finale", players: living, step: 0, current: order[0], promptAt: now, tappedAt: null, shownAt: null, revealed: {}, done: false, doneAt: null, winner: null });
+}
+function finaleTapped(f, id){
+  if (isTrial()){
+    if (id === TRIAL_ME){ const p = trialFpicks[TRIAL_ME]; return !!(p && p.round === f.round && p.revealRole); }
+    return Date.now() >= f.promptAt + FIN_TRIAL_MS;
+  }
+  const p = fpicks[id];
+  return !!(p && p.round === f.round && p.revealRole);
+}
+async function finaleAutomation(f){
+  const plan = finalePlan(); if (!plan || plan.round !== f.round) return;
+  const now = Date.now();
+  if (f.winner) return;
+  if (f.done){
+    if (now >= f.doneAt + FINALE_WAIT_MS + (plan.traitorsLeft.length ? 3000 : 0))
+      await putFire({ ...f, winner: plan.winner, traitorsLeft: plan.traitorsLeft, allRoles: plan.allRoles });
+    return;
+  }
+  const id = f.current, traitor = plan.allRoles[id] === "traitor";
+  if (!f.tappedAt){ if (finaleTapped(f, id)) await putFire({ ...f, tappedAt: now }); return; }
+  if (!f.shownAt){
+    if (now >= f.tappedAt + (traitor ? FIN_PAUSE_T : FIN_PAUSE_F)) await putFire({ ...f, shownAt: now, revealed: { ...f.revealed, [id]: plan.allRoles[id] } });
+    return;
+  }
+  if (now >= f.shownAt + (traitor ? FIN_HOLD_T : FIN_HOLD_F)){
+    const step = f.step + 1;
+    if (step >= plan.order.length) await putFire({ ...f, done: true, doneAt: now, current: null });
+    else await putFire({ ...f, step, current: plan.order[step], promptAt: now, tappedAt: null, shownAt: null });
+  }
+}
+async function revealMyRole(){
+  const f = fireState(); if (!f || f.phase !== "finale" || f.current !== myId() || f.tappedAt) return;
+  if (isTrial()){ trialFpicks[TRIAL_ME] = { round: f.round, revealRole: true }; renderWall(); return; }
+  fireSaving = true; renderFire(true);
+  try { await db.doc("fpicks/"+me).set({ round: f.round, choice: myFireChoice() || "end", revealRole: true }); }
+  catch(_){ toast("That didn't go through. Tap Reveal my role again."); }
+  finally { fireSaving = false; renderFire(true); }
+}
+async function forceFinaleReveal(){
+  const f = fireState(); if (!f || f.phase !== "finale" || f.tappedAt || f.done) return;
+  try { await putFire({ ...f, tappedAt: Date.now() }); } catch(_){ toast("That didn't save. Try again."); }
 }
 async function fireToVote(){
   const f = fireState(); if (!f) return;
@@ -2219,13 +2405,14 @@ async function submitFire(choice){
 }
 async function fireAutomation(){
   if (fireAuto || !(role === "host" || isTrial())) return;
-  const f = fireState(); if (!f || f.phase !== "choose") return;
+  const f = fireState(); if (!f || (f.phase !== "choose" && f.phase !== "finale")) return;
   fireAuto = true;
   try {
     if (isTrial() && Date.now() >= f.startedAt + FIRE_TRIAL_MS){
       f.players.filter(id => id !== TRIAL_ME && !(trialFpicks[id] && trialFpicks[id].round === f.round))
         .forEach(id => { trialFpicks[id] = { round: f.round, choice: Math.random() < 0.7 ? "end" : "banish" }; });
     }
+    if (f.phase === "finale"){ await finaleAutomation(f); return; }
     const decided = Object.keys(fireChoices(f)).length;
     if (decided === f.players.length) await closeFire(f);
     else if (decided !== f.decided) await putFire({ ...f, decided });
@@ -2235,37 +2422,6 @@ async function fireAutomation(){
 
 function firePortrait(id, tagText, tagClass){
   return `<figure class="fire-player">${bigPortrait(id, "fire-portrait")}<figcaption class="plaque">${escapeHtml(nameOf(id))}</figcaption>${tagText ? `<span class="role-tag ${tagClass || ""}">${tagText}</span>` : ""}</figure>`;
-}
-// Each screen times the finale from when it first saw it, so the reveals line up with the room.
-// Each player is called first ("Ada is…"), then their role turns over after a pause.
-// The pauses grow as the reveal goes on, and a Traitor gets the longest wait of all.
-const FINALE_FIRST_MS = 4000, FINALE_WAIT_MS = 10000;
-const finaleSeen = {};
-function finaleSchedule(f){
-  const order = f.order || f.players, n = order.length, out = [];
-  let t = FINALE_FIRST_MS;
-  order.forEach((id, i) => {
-    const last = i === n - 1, traitor = f.roles[id] === "traitor";
-    const pause = traitor ? (last ? 14000 : 11000) : (last ? 9000 : 5000 + i * 1000);
-    out.push({ id, callAt: t, revealAt: t + pause, traitor });
-    t += pause + (traitor ? 7000 : 5000); // time to take each reveal in before the next name is called
-  });
-  const lastReveal = out.length ? out[out.length - 1].revealAt : 0;
-  const hasTraitor = out.some(x => x.traitor);
-  return { steps: out, winnerAt: lastReveal + FINALE_WAIT_MS + (hasTraitor ? 3000 : 0) };
-}
-function finaleProgress(f){
-  if (!f || f.phase !== "finale") return { shown: 0, calling: null, done: false, winner: false };
-  const order = f.order || f.players;
-  const sch = finaleSchedule(f);
-  if (!finaleSeen[f.round]){
-    // A device that opens the page long after the finale skips straight to the result.
-    finaleSeen[f.round] = f.finaleAt && Date.now() - f.finaleAt > sch.winnerAt + 20000 ? f.finaleAt : Date.now();
-  }
-  const t = Date.now() - finaleSeen[f.round];
-  const shown = sch.steps.filter(x => t >= x.revealAt).length;
-  const callingStep = sch.steps.find(x => t >= x.callAt && t < x.revealAt);
-  return { shown, calling: callingStep ? callingStep.id : null, done: shown >= order.length, winner: t >= sch.winnerAt, order };
 }
 function renderFire(force){
   const stage = $("fireStage");
@@ -2278,8 +2434,8 @@ function renderFire(force){
   const mine = myFireChoice();
   const inGame = f.players.includes(myId());
   const choicesLive = host ? fireChoices(f) : {};
-  const fp = finaleProgress(f);
-  const key = JSON.stringify([f.round, f.phase, f.decided, f.outcome, host, player, screen, mine, fireSaving, inGame, choicesLive, ownRole(), fp.shown, fp.calling, fp.winner]);
+  const key = JSON.stringify([f.round, f.phase, f.decided, f.outcome, host, player, screen, mine, fireSaving, inGame, choicesLive, ownRole(),
+    f.current, f.tappedAt, f.shownAt, f.done, f.winner, isTrial() ? (trialFpicks[TRIAL_ME] || {}).revealRole : null]);
   if (key === fireKey && !force) return;
   fireKey = key;
   const kick = `<span class="kicker">The Fire Pit · Round ${f.round}</span>`;
@@ -2316,45 +2472,61 @@ function renderFire(force){
       ? `${kick}<h3>${headline}</h3><p style="margin:0">${sub}</p>`
       : `${kick}<h3>${headline}</h3>${row}<p class="stage-lede">${sub}</p>${acts}`;
   } else if (f.phase === "finale"){
-    const tw = f.winner === "traitors";
-    const headline = tw ? "The Traitors win" : "The Faithful win";
-    const winners = tw ? f.traitorsLeft : f.players.filter(id => f.roles[id] !== "traitor");
-    const sub = tw
-      ? `${f.traitorsLeft.map(id => escapeHtml(nameOf(id))).join(" and ")} ${f.traitorsLeft.length > 1 ? "were Traitors" : "was a Traitor"} all along.`
-      : "Every Traitor has been banished. The Faithful share the prize.";
-    if (player && !host && !screen){
-      if (!fp.winner){
-        html = `<span class="kicker">The end</span><h3>The truth is being revealed</h3><p class="muted" style="margin:0">Watch the community screen.</p>`;
-      } else {
+    const meId = myId();
+    const revealedIds = Object.keys(f.revealed || {});
+    if (f.winner){
+      const tw = f.winner === "traitors";
+      const headline = tw ? "The Traitors win" : "The Faithful win";
+      const winners = tw ? f.traitorsLeft : f.players.filter(id => f.allRoles[id] !== "traitor");
+      const sub = tw
+        ? `${f.traitorsLeft.map(id => escapeHtml(nameOf(id))).join(" and ")} ${f.traitorsLeft.length > 1 ? "were Traitors" : "was a Traitor"} all along.`
+        : "Every Traitor has been banished. The Faithful share the prize.";
+      if (player && !host && !screen){
         const myTeam = ownRole();
         const won = myTeam ? ((myTeam === "traitor") === tw) : null;
         html = `<span class="kicker">The end</span><h3>${headline}</h3><p style="margin:0">${sub}</p>${won === null ? "" : `<div class="verdict ${won ? "role-faithful" : "role-traitor"}">${won ? "You won." : "You lost."}</div>`}`;
+      } else {
+        html = `<span class="kicker">The end</span><h3 class="final-headline ${tw ? "final-traitor" : "final-faithful"}">${headline}</h3>
+          <div class="fire-row winners">${winners.map(id => firePortrait(id, tw ? "TRAITOR" : "FAITHFUL", tw ? "traitor" : "")).join("")}</div>
+          <p class="stage-lede">${sub}</p>${host ? `<p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>` : ""}`;
       }
-    } else if (!fp.winner){
-      // One by one: every remaining portrait, each role turning over in turn.
-      const shownIds = fp.order.slice(0, fp.shown);
-      const latest = shownIds[shownIds.length - 1];
-      const latestTraitor = latest && f.roles[latest] === "traitor";
-      const row = fp.order.map(id => {
-        const isShown = shownIds.includes(id);
-        const r = f.roles[id];
-        let html1 = firePortrait(id, isShown ? (r === "traitor" ? "TRAITOR" : "FAITHFUL") : "?", isShown && r === "traitor" ? "traitor" : "");
-        if (id === fp.calling) html1 = html1.replace('class="fire-player"', 'class="fire-player spotlight"');
-        else if (id === latest && !fp.calling) html1 = html1.replace('class="fire-player"', `class="fire-player just-revealed${latestTraitor ? " traitor-reveal" : ""}"`);
-        else if (!isShown && fp.calling) html1 = html1.replace('class="fire-player"', 'class="fire-player dimmed"');
-        return html1;
+    } else if (player && !host && !screen){
+      const myTurn = f.current === meId && !f.tappedAt;
+      const tappedTrial = isTrial() && (trialFpicks[TRIAL_ME] || {}).revealRole && (trialFpicks[TRIAL_ME] || {}).round === f.round;
+      const waiting = !isTrial() && myFpick && myFpick.round === f.round && myFpick.revealRole && !f.tappedAt;
+      if (myTurn){
+        html = `<span class="kicker">The end</span><h3>It's your turn</h3><p style="margin:0">Everyone is watching the community screen. Reveal who you really are.</p>
+          <div class="acts"><button class="btn solid big-btn" type="button" data-fire="reveal-role" ${fireSaving || waiting || tappedTrial ? "disabled" : ""}>${fireSaving || waiting || tappedTrial ? "Revealing…" : "Reveal my role"}</button></div>`;
+      } else if (f.revealed && f.revealed[meId]){
+        html = `<span class="kicker">The end</span><h3>Your role is on the screen</h3><p class="muted" style="margin:0">Watch the community screen for the rest.</p>`;
+      } else if (f.players.includes(meId)){
+        html = `<span class="kicker">The end</span><h3>Wait for your name</h3><p class="muted" style="margin:0">${f.current ? `${escapeHtml(nameOf(f.current))} is revealing their role.` : "Every role has been revealed."} Watch the community screen.</p>`;
+      } else {
+        html = `<span class="kicker">The end</span><h3>The truth is being revealed</h3><p class="muted" style="margin:0">Watch the community screen.</p>`;
+      }
+    } else {
+      // Every remaining portrait, each role turning over as its player reveals it.
+      const latest = f.current && f.shownAt ? f.current : null;
+      const latestTraitor = latest && f.revealed[latest] === "traitor";
+      const calling = f.current && !f.shownAt ? f.current : null;
+      const row = f.players.map(id => {
+        const r = f.revealed[id];
+        let h1 = firePortrait(id, r ? (r === "traitor" ? "TRAITOR" : "FAITHFUL") : "?", r === "traitor" ? "traitor" : "");
+        if (id === calling) h1 = h1.replace('class="fire-player"', 'class="fire-player spotlight"');
+        else if (id === latest) h1 = h1.replace('class="fire-player"', `class="fire-player just-revealed${latestTraitor ? " traitor-reveal" : ""}"`);
+        else if (!r && calling) h1 = h1.replace('class="fire-player"', 'class="fire-player dimmed"');
+        return h1;
       }).join("");
       let lede;
-      if (fp.calling) lede = `<span class="calling">${escapeHtml(nameOf(fp.calling))} is…</span>`;
-      else if (!fp.shown) lede = "The final players will now reveal who they really are.";
+      if (calling && !f.tappedAt) lede = `<span class="calling">${escapeHtml(nameOf(calling))}, reveal your role</span><br><span class="muted">Tap <b>Reveal my role</b> on your phone.</span>`;
+      else if (calling) lede = `<span class="calling">${escapeHtml(nameOf(calling))} is…</span>`;
       else if (latestTraitor) lede = `<span class="calling traitor-line">${escapeHtml(nameOf(latest))} is… a Traitor.</span>`;
-      else if (fp.done) lede = "Every role has been revealed.";
-      else lede = `${escapeHtml(nameOf(latest))} is… Faithful.`;
-      html = `<span class="kicker">The end</span><h3>The truth is revealed</h3><div class="fire-row">${row}</div><p class="stage-lede">${lede}</p>`;
-    } else {
-      html = `<span class="kicker">The end</span><h3 class="final-headline ${tw ? "final-traitor" : "final-faithful"}">${headline}</h3>
-        <div class="fire-row winners">${winners.map(id => firePortrait(id, tw ? "TRAITOR" : "FAITHFUL", tw ? "traitor" : "")).join("")}</div>
-        <p class="stage-lede">${sub}</p>${host ? `<p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>` : ""}`;
+      else if (latest) lede = `${escapeHtml(nameOf(latest))} is… Faithful.`;
+      else if (f.done) lede = "Every role has been revealed.";
+      else lede = "The final players will now reveal who they really are.";
+      const hostActs = host && calling && !f.tappedAt
+        ? `<div class="acts"><button class="btn small" type="button" data-fire="force-reveal">Reveal for ${escapeHtml(nameOf(calling))}</button></div>` : "";
+      html = `<span class="kicker">The end · ${revealedIds.length} of ${f.players.length} revealed</span><h3>The truth is revealed</h3><div class="fire-row">${row}</div><p class="stage-lede">${lede}</p>${hostActs}`;
     }
   }
   stage.innerHTML = html;
@@ -2368,13 +2540,10 @@ $("fireStage").addEventListener("click", e => {
   else if (a === "cancel") putFire({ ...f, phase:"closed" }).catch(()=> toast("That didn't save. Try again."));
   else if (a === "vote") fireToVote();
   else if (a === "finale") fireFinale(f.round, f.players).catch(()=> toast("That didn't save. Try again."));
+  else if (a === "reveal-role") revealMyRole();
+  else if (a === "force-reveal") forceFinaleReveal();
 });
-setInterval(() => {
-  fireAutomation();
-  const f = fireState();
-  if (f && f.phase === "finale" && gameState().started){ const before = finaleProgress(f).winner; renderFire(false); if (before && !finaleTagged[f.round]){ finaleTagged[f.round] = true; renderWall(); } }
-}, 300);
-const finaleTagged = {};
+setInterval(() => { fireAutomation(); }, 300);
 
 /* ---------- Special murders: the Safety Chain ---------- */
 // game/chain is public: who is safe (in order), who is still unsafe, and whose turn it is.
@@ -2595,37 +2764,51 @@ const FIREBASE_CONFIG = {
 };
 // ============================================================================
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { initializeFirestore, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
+const say = stage => { window.FB_STAGE = stage; window.dispatchEvent(new Event("fb-stage")); };
 const done = extra => { window.FB = Object.assign(window.FB || {}, extra, { ready: true }); window.dispatchEvent(new Event("fb-ready")); };
 if (Object.values(FIREBASE_CONFIG).some(v => !v || v === "PASTE-HERE")){
   window.FB_MISSING_CONFIG = true; done({ error: "config" });
 } else {
-  try {
-    const app = initializeApp(FIREBASE_CONFIG);
-    const fs = initializeFirestore(app, { ignoreUndefinedProperties: true });
-    const auth = getAuth(app);
-    // Same shape the game uses everywhere: doc(path) / collection(path) with get/set/update/delete/onSnapshot.
-    const wrap = s => ({ id: s.id, exists: s.exists(), data: () => (s.exists() ? s.data() : undefined) });
-    const docRef = p => { const r = doc(fs, p); return {
-      id: r.id, path: p,
-      get: async () => wrap(await getDoc(r)),
-      set: d => setDoc(r, d), update: d => updateDoc(r, d), delete: () => deleteDoc(r),
-      onSnapshot: (next, err) => onSnapshot(r, s => next(wrap(s)), e => err && err(e))
-    }; };
-    const colRef = p => { const r = collection(fs, p); return {
-      path: p, doc: id => docRef(p + "/" + id),
-      get: async () => { const q = await getDocs(r); return { docs: q.docs.map(wrap), size: q.size, empty: q.empty }; },
-      onSnapshot: (next, err) => onSnapshot(r, q => next({ docs: q.docs.map(wrap), size: q.size, empty: q.empty }), e => err && err(e))
-    }; };
-    const db = { doc: docRef, collection: colRef };
-    let fired = false;
-    onAuthStateChanged(auth, u => { if (u && !fired){ fired = true; done({ db, uid: u.uid }); } });
-    signInAnonymously(auth).catch(() => { if (!fired){ fired = true; done({ error: "auth" }); } });
-  } catch(_){ done({ error: "init" }); }
+  (async () => {
+    let appMod, fsMod, authMod;
+    say("loading");
+    try {
+      [appMod, fsMod, authMod] = await Promise.all([
+        import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"),
+        import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"),
+        import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js")
+      ]);
+    } catch(e){ console.error("Firebase code failed to load", e); done({ error: "load", code: "load-failed: " + ((e && e.message) || e) }); return; }
+    try {
+      say("starting");
+      const { initializeApp } = appMod;
+      const { initializeFirestore, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot } = fsMod;
+      const { getAuth, signInAnonymously, onAuthStateChanged } = authMod;
+      const app = initializeApp(FIREBASE_CONFIG);
+      const fs = initializeFirestore(app, { ignoreUndefinedProperties: true, experimentalAutoDetectLongPolling: true });
+      const auth = getAuth(app);
+      // Same shape the game uses everywhere: doc(path) / collection(path) with get/set/update/delete/onSnapshot.
+      const wrap = s => ({ id: s.id, exists: s.exists(), data: () => (s.exists() ? s.data() : undefined) });
+      const docRef = p => { const r = doc(fs, p); return {
+        id: r.id, path: p,
+        get: async () => wrap(await getDoc(r)),
+        set: d => setDoc(r, d), update: d => updateDoc(r, d), delete: () => deleteDoc(r),
+        onSnapshot: (next, err) => onSnapshot(r, s => next(wrap(s)), e => err && err(e))
+      }; };
+      const colRef = p => { const r = collection(fs, p); return {
+        path: p, doc: id => docRef(p + "/" + id),
+        get: async () => { const q = await getDocs(r); return { docs: q.docs.map(wrap), size: q.size, empty: q.empty }; },
+        onSnapshot: (next, err) => onSnapshot(r, q => next({ docs: q.docs.map(wrap), size: q.size, empty: q.empty }), e => err && err(e))
+      }; };
+      const db = { doc: docRef, collection: colRef };
+      let fired = false;
+      const finish = extra => { if (!fired){ fired = true; done(extra); } };
+      say("signing-in");
+      onAuthStateChanged(auth, u => { if (u) finish({ db, uid: u.uid }); });
+      signInAnonymously(auth).catch(e => { console.error("Sign-in failed", e); finish({ error: "auth", code: (e && (e.code || e.message)) || "sign-in-failed" }); });
+      setTimeout(() => finish({ error: "auth", code: "sign-in-timeout" }), 20000);
+    } catch(e){ console.error("Firebase setup failed", e); done({ error: "init", code: (e && (e.code || e.message)) || "init-failed" }); }
+  })();
 }
 </script>
 </body>
