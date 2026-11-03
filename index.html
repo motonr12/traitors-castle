@@ -324,6 +324,32 @@ html.screen-mode,body.screen-mode{height:100%}
 .game-chart td.ch-murdered{background:#7b1712;color:#fff}
 .game-chart td.ch-banished{background:#e3867a;color:#2a0f0b}
 .game-chart tr.ch-sep th,.game-chart tr.ch-sep td{border-bottom:6px solid #1d1b17}
+.ghost-reveal{display:flex;flex-direction:column;align-items:center;gap:14px;padding:clamp(18px,4vh,40px) 12px;border-radius:2px;
+  background:radial-gradient(ellipse at 50% 40%,rgba(160,190,200,.16),rgba(5,8,8,.96) 70%),#050808;color:#dbe6e8;animation:ghostIn 1.4s ease-out both}
+.ghost-whisper{font-family:var(--font-display);font-size:clamp(1.5rem,5vh,2.8rem);letter-spacing:.08em;color:#c9dade;text-shadow:0 0 18px rgba(170,210,220,.55);animation:ghostFloat 4s ease-in-out infinite}
+.ghost-sub{color:#93a9ad;font-style:italic}
+.ghost-dots{display:flex;gap:12px}
+.ghost-dots span{width:12px;height:12px;border-radius:50%;background:#c9dade;box-shadow:0 0 12px #c9dade;animation:ghostPulse 1.2s ease-in-out infinite}
+.ghost-dots span:nth-child(2){animation-delay:.2s}.ghost-dots span:nth-child(3){animation-delay:.4s}
+.ghost-reveal.shown{animation:ghostShake .6s cubic-bezier(.36,.07,.19,.97) both}
+.btn.ghost-summon{background:#c9dade;border-color:#c9dade;color:#0b1112;box-shadow:0 0 24px rgba(170,210,220,.45)}
+.btn.ghost-summon:hover{background:#f4fbfc;border-color:#f4fbfc;color:#0b1112}
+.ghost-name{max-width:100%;padding:6px 18px}
+.ghost-name .reveal-call{overflow:visible;padding:0 6px;color:#f4fbfc;font-size:clamp(2.4rem,9vh,5.5rem);text-shadow:0 0 24px rgba(200,235,245,.9),0 0 60px rgba(160,200,215,.6);animation:ghostFlicker 2.2s linear both}
+.ghost-target-portrait{width:clamp(110px,22vh,220px);filter:grayscale(.6) contrast(1.1);box-shadow:0 0 50px rgba(170,210,220,.55);animation:fadein 2s ease-in .4s both}
+@keyframes ghostIn{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:none}}
+@keyframes ghostFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes ghostPulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+@keyframes ghostShake{10%,90%{transform:translate(-2px,0)}20%,80%{transform:translate(4px,0)}30%,50%,70%{transform:translate(-8px,0)}40%,60%{transform:translate(8px,0)}}
+@keyframes ghostFlicker{0%{opacity:0}8%{opacity:1}10%{opacity:.1}14%{opacity:1}22%{opacity:.2}26%{opacity:1}40%{opacity:.6}44%{opacity:1}100%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.ghost-reveal,.ghost-whisper,.ghost-dots span,.ghost-reveal.shown,.ghost-name .reveal-call,.ghost-target-portrait{animation:none}}
+details.ghost-block{padding-top:12px}
+details.ghost-block > summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+details.ghost-block > summary::-webkit-details-marker{display:none}
+details.ghost-block > summary::after{content:"Show";font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:#93a9ad;flex:none}
+details.ghost-block[open] > summary::after{content:"Hide"}
+details.ghost-block > summary:focus-visible{outline:2px solid var(--parchment);outline-offset:3px}
+.ghost-pick{display:block;font-size:.9rem;color:#93a9ad;font-family:var(--font-body);letter-spacing:0}
 .final-traitor{color:#f0b8b2}
 .final-faithful{color:var(--brass)}
 .screen-mode .fire-row{flex-wrap:nowrap}
@@ -1256,14 +1282,15 @@ async function setStatus(id, state, opts){
   if (state && gameState().started && !allStatus()[id]) await logEvent({ type:"elim", id, state, role: roleMap()[id] || null });
   if (isTrial()){
     trialGame.hidden = trialGame.hidden || {};
+    const wasOut = !!trialStatus[id];
     if (state) trialStatus[id] = state; else delete trialStatus[id];
     trialGame.statusAt = trialGame.statusAt || {};
-    if (state){ if (!trialGame.statusAt[id]) trialGame.statusAt[id] = Date.now(); } else delete trialGame.statusAt[id];
+    if (state){ if (!wasOut || !trialGame.statusAt[id]) trialGame.statusAt[id] = Date.now(); } else delete trialGame.statusAt[id];
     if (state && hide) trialGame.hidden[id] = true; else delete trialGame.hidden[id];
     saveTrial(); renderWall(); return;
   }
   try {
-    if (state) await db.doc("status/"+id).set({ state, role: hide ? null : (roles[id] || null), at: Date.now() });
+    if (state) await db.doc("status/"+id).set({ state, role: hide ? null : (roles[id] || null), at: (statuses[id] && statusAt[id]) || Date.now() });
     else await db.doc("status/"+id).delete();
   } catch(_){ toast("That change didn't save. Try again."); }
 }
@@ -1426,8 +1453,13 @@ async function closeVote(v){
   await putVote({ ...v, phase:"reveal", order, step: 0, promptAt: Date.now(), shownAt: null, revealed: [], callMs, showMs, daggerMs: extra });
 }
 // The reveal runs on its own: each voter's name is called, and after a short pause their vote appears.
-const CALL_MS = 2500, REVEAL_TOTAL_MS = 60000;
+const CALL_MS = 2500, REVEAL_TOTAL_MS = 60000, GHOST_SUSPENSE_MS = 3500, GHOST_HOLD_MS = 9000;
+async function revealGhostVote(){
+  const v = currentVote(); if (!v || v.phase !== "reveal" || v.order[v.step] !== GHOSTS_ID || v.ghostGo) return;
+  try { await putVote({ ...v, ghostGo: Date.now() }); } catch(_){ toast("That didn't save. Try again."); }
+}
 function voterPressedReveal(v, voter){
+  if (voter === GHOSTS_ID) return !!v.ghostGo && Date.now() >= v.ghostGo + GHOST_SUSPENSE_MS; // the host reveals the ghosts
   return Date.now() >= v.promptAt + (v.callMs || CALL_MS);
 }
 function getLockedDaggers(v){
@@ -1491,7 +1523,7 @@ async function hostAutomation(){
         const voter = v.order[v.step];
         // A player who didn't vote is announced straight away; otherwise wait for their tap.
         if (!locked[voter] || voterPressedReveal(v, voter)) await showCurrent(v, locked);
-      } else if (now >= v.shownAt + (v.showMs || SHOW_MS) + (((v.revealed[v.step] || {}).weight === 2) ? (v.daggerMs || DAGGER_EXTRA_MS) : 0)){
+      } else if (now >= v.shownAt + (v.order[v.step] === GHOSTS_ID ? GHOST_HOLD_MS : (v.showMs || SHOW_MS) + (((v.revealed[v.step] || {}).weight === 2) ? (v.daggerMs || DAGGER_EXTRA_MS) : 0))){
         trialRevealReq = false;
         const step = v.step + 1;
         if (step >= v.order.length) await finishVote({ ...v, step });
@@ -1607,7 +1639,8 @@ function renderVote(force){
     const isMe = player && voter === myId_;
     const meDone = player && v.revealed.some(r => r.voter === myId_);
     const waitingTap = isTrial() ? trialRevealReq : !!(myLiveVote && myLiveVote.round === v.round && myLiveVote.revealed);
-    const key = ["rev", v.round, step, shown, isMe, meDone, myVoteSaving, waitingTap, host, screen, player].join("|");
+    const ghostStage = voter === GHOSTS_ID ? (shown ? "shown" : v.ghostGo ? "rising" : "waiting") : "";
+    const key = ["rev", v.round, step, shown, isMe, meDone, myVoteSaving, waitingTap, host, screen, player, ghostStage].join("|");
     if (key === stageKey && !force) return;
     stageKey = key;
     const progress = `<p class="muted step-count">Vote ${step + 1} of ${total}</p>`;
@@ -1618,11 +1651,29 @@ function renderVote(force){
       } else if (isMe && shown){
         stage.innerHTML = `${kick}<h3>Your vote is on the screen</h3><p class="muted" style="margin:0">You voted for ${cur.target ? `<b>${escapeHtml(nameOf(cur.target))}</b>` : "nobody"}.</p>`;
       } else {
-        stage.innerHTML = `${kick}<h3>Eyes on the community screen</h3><p class="muted" style="margin:0">${voter === GHOSTS_ID ? `The ghosts ${shown ? "are revealing" : "are about to reveal"} their vote.` : `${escapeHtml(nameOf(voter))} is ${shown ? "revealing" : "about to reveal"} their vote.`}${meDone ? " Your vote has been revealed." : ""}</p>`;
+        stage.innerHTML = `${kick}<h3>Eyes on the community screen</h3><p class="muted" style="margin:0">${voter === GHOSTS_ID ? (shown ? "The ghosts have spoken." : "The dead are about to speak.") : `${escapeHtml(nameOf(voter))} is ${shown ? "revealing" : "about to reveal"} their vote.`}${meDone ? " Your vote has been revealed." : ""}</p>`;
       }
       return;
     }
 
+    if (voter === GHOSTS_ID){
+      // The ghosts' moment: the room goes dark, the host summons them, then the name flickers in.
+      let g;
+      if (!shown && !v.ghostGo){
+        g = `<div class="ghost-reveal"><div class="ghost-whisper">But the dead are not finished…</div>
+          <div class="ghost-sub">The ghosts have cast one vote of their own.</div></div>`;
+      } else if (!shown){
+        g = `<div class="ghost-reveal rising"><div class="ghost-whisper">The ghosts vote for…</div><div class="ghost-dots"><span></span><span></span><span></span></div></div>`;
+      } else {
+        g = `<div class="ghost-reveal shown"><div class="ghost-whisper">The ghosts vote for…</div>
+          <div class="ghost-name"><span class="reveal-call">${cur.target ? escapeHtml(nameOf(cur.target)) : "No one"}</span></div>
+          ${cur.target ? bigPortrait(cur.target, "ghost-target-portrait") : ""}</div>`;
+      }
+      const ghostBtn = host && !shown && !v.ghostGo ? `<div class="acts"><button class="btn big-btn ghost-summon" type="button" data-vote="ghost-reveal">Reveal the ghost vote</button></div>` : "";
+      stage.innerHTML = `${kick}${progress}${g}${ghostBtn}${talliesHtml(v.revealed)}`;
+      fitNames(stage);
+      return;
+    }
     let main;
     if (!shown){
       main = `<div class="reveal-row">${bigPortrait(voter)}<div class="reveal-text">
@@ -1674,6 +1725,7 @@ $("voteStage").addEventListener("click", e => {
   if (a === "dagger"){ daggerOn = !daggerOn; renderVote(true); return; }
   if (a === "submit" && (pickTarget || myVoteTarget(v))) submitVote(pickTarget || myVoteTarget(v));
   else if (a === "reveal") requestReveal();
+  else if (a === "ghost-reveal") revealGhostVote();
   else if (a === "revote" && v.outcome && v.outcome.type === "tie") startVote({ candidates: v.outcome.ids, endgame: !!v.endgame });
   else if (a === "force") forceReveal();
   else if (a === "close") putVote({ ...v, endsAt: Date.now() - GRACE_MS }).catch(()=> toast("Voting couldn't be closed. Try again."));
@@ -2837,7 +2889,8 @@ function renderChain(force){
         <button class="link" type="button" data-chain="setup-cancel">Cancel</button></div>`;
   } else if (host && chainLive()){
     const t = turretState(), voting = t && t.mode === "chain" && t.phase !== "closed";
-    key = ["hchain", c.round, c.phase, c.step, voting].join("|");
+    const Pw = powersMap();
+    key = ["hchain", c.round, c.phase, c.step, voting, JSON.stringify(c.remaining.map(id => [id, !!(Pw[id] || {}).shield, !!(Pw[id] || {}).dagger]))].join("|");
     const safeList = `<p class="muted" style="margin:0">Safe so far: ${namesList(c.order)}</p>`;
     if (c.phase === "chain"){
       html = `<span class="kicker">Safety Chain · ${c.remaining.length} unsafe</span><h3>${escapeHtml(nameOf(c.current))} is choosing</h3>${safeList}
@@ -2847,6 +2900,7 @@ function renderChain(force){
     } else {
       html = `<span class="kicker">Safety Chain</span><h3>${c.remaining.length} players remain unsafe</h3>${safeList}
         <p style="margin:0">Unsafe: ${namesList(c.remaining)}</p>
+        ${chainPowersHtml(c)}
         ${voting ? `<p class="muted" style="margin:0">The Traitors are voting. Follow along in the Turret panel.</p>`
           : `<div class="acts"><button class="btn solid danger" type="button" data-chain="to-traitors">Send to the Traitors</button><button class="link" type="button" data-chain="cancel">Cancel the Safety Chain</button></div>`}`;
     }
@@ -2879,6 +2933,10 @@ function renderChain(force){
   stage.innerHTML = html;
 }
 $("chainStage").addEventListener("click", e => {
+  const cs = e.target.closest("[data-chainshield]");
+  if (cs){ chainGiveShield(cs.dataset.chainshield).then(() => renderChain(true)); return; }
+  const cd = e.target.closest("[data-chaindagger]");
+  if (cd){ chainGiveDagger(cd.dataset.chaindagger).then(() => renderChain(true)); return; }
   const st = e.target.closest("[data-chainstart]");
   if (st){ chainStarter = st.dataset.chainstart; renderChain(true); return; }
   const sel = e.target.closest("[data-chainsel]");
@@ -2895,6 +2953,38 @@ $("chainStage").addEventListener("click", e => {
   else if (a === "to-traitors") chainToTraitors();
   else if (a === "cancel") cancelChain();
 });
+
+/* ----- powers for the unsafe six: one shield and the Dagger, given secretly by the host ----- */
+function chainPowersHtml(c){
+  const P = powersMap();
+  const chip = (id, on, attr) => `<button class="choice" type="button" ${attr}="${escapeHtml(id)}" aria-pressed="${on}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}</span></button>`;
+  const shieldHolder = c.remaining.find(id => (P[id] || {}).shield && (P[id] || {}).chainShield === c.round);
+  const daggerHolder = c.remaining.find(id => (P[id] || {}).dagger);
+  return `<div class="ghost-block"><b>Give one of the unsafe a shield</b><span class="muted">Secret. If the Traitors pick them tonight, nobody dies. Tap again to take it back.${shieldHolder ? ` Shield: <b>${escapeHtml(nameOf(shieldHolder))}</b>.` : ""}</span>
+      <div class="choices">${c.remaining.map(id => chip(id, id === shieldHolder, "data-chainshield")).join("")}</div></div>
+    <div class="ghost-block"><b>Give one of the unsafe the Dagger</b><span class="muted">Secret. Their vote counts twice in one banishment of their choice. Giving it here takes it from anyone else.${daggerHolder ? ` Dagger: <b>${escapeHtml(nameOf(daggerHolder))}</b>.` : ""}</span>
+      <div class="choices">${c.remaining.map(id => chip(id, id === daggerHolder, "data-chaindagger")).join("")}</div></div>`;
+}
+async function chainGiveShield(id){
+  const c = chainState(); if (!c) return;
+  const P = powersMap(), cur = P[id] || {};
+  try {
+    if (cur.shield && cur.chainShield === c.round){ await setPower(id, { ...cur, shield: false, chainShield: null }); toast(nameOf(id) + "'s shield was taken back"); return; }
+    // Only one Safety Chain shield: move it from whoever had it.
+    await Promise.all(c.remaining.filter(x => x !== id && (P[x] || {}).chainShield === c.round && (P[x] || {}).shield).map(x => setPower(x, { ...P[x], shield: false, chainShield: null })));
+    await setPower(id, { ...cur, shield: true, grantedAt: Date.now(), expired: false, chainShield: c.round });
+    toast(nameOf(id) + " now holds a shield");
+  } catch(_){ toast("That didn't save. Try again."); }
+}
+async function chainGiveDagger(id){
+  const P = powersMap(), cur = P[id] || {};
+  try {
+    if (cur.dagger){ await setPower(id, { ...cur, dagger: false }); toast(nameOf(id) + "'s Dagger was taken away"); return; }
+    await Promise.all(Object.keys(P).filter(x => x !== id && P[x].dagger).map(x => setPower(x, { ...P[x], dagger: false })));
+    await setPower(id, { ...cur, dagger: true, daggerSeen: 0, daggerUsed: false, daggerExpired: false, daggerAt: Date.now() });
+    toast(nameOf(id) + " now holds the Dagger");
+  } catch(_){ toast("That didn't save. Try again."); }
+}
 
 /* ----- the community screen's Safety Chain wall ----- */
 function renderChainWall(wall){
@@ -2983,6 +3073,7 @@ async function setScreenSetting(on){
 const GHOSTS_ID = "__ghosts";
 let ghostSetting = null, liveGhostBoard = null, hostGhosts = {}, myGhost = null, hostGhostMeta = null;
 let ghostKey = "", ghostSaving = false;
+const ghostOpen = new Set(); // which ghost sections this player has opened
 const ghostModeOn = () => isTrial() ? !!(gameState().started ? trialGame.ghostMode : trialGame.ghostSetting)
   : !!(game.started ? game.ghostMode : (ghostSetting && ghostSetting.on));
 const ghostBoard = () => isTrial() ? (trialGame.ghostBoard || { scores:{} }) : (liveGhostBoard || { scores:{} });
@@ -3074,6 +3165,7 @@ async function revivePlayer(id){
     if (isTrial()){
       trialGame.roles[id] = newRole;
       delete trialStatus[id]; if (trialGame.hidden) delete trialGame.hidden[id];
+      if (trialGame.statusAt) delete trialGame.statusAt[id]; // their first exit no longer counts
       trialGame.revived = { ...(trialGame.revived || {}), [id]: round };
       if (id === TRIAL_ME) revealed = false;
       saveTrial(); renderWall();
@@ -3138,18 +3230,28 @@ function renderGhost(force){
     html += `<div class="ghost-block ghost-vote"><b>The ghost vote is open</b><span class="muted">The ghosts' most popular pick counts as one extra vote at this Round Table.</span>
       <div class="choices">${c.map(id => chip(id, mine === id, "data-gvote")).join("")}</div></div>`;
   }
-  html += `<div class="ghost-block"><b>Who are the Traitors?</b><span class="muted">Tap everyone you suspect. You score a point for each Traitor you name and lose one for each Faithful, at the end of the game.</span>
-    <div class="choices">${living.map(id => chip(id, pred.includes(id), "data-gpred")).join("")}</div></div>`;
+  const section = (key2, title, pick, body) => `<details class="ghost-block" data-gsec="${key2}" ${ghostOpen.has(key2) ? "open" : ""}>
+    <summary><b>${title}<span class="ghost-pick">${pick}</span></b></summary>${body}</details>`;
+  html += section("pred", "Who are the Traitors?", pred.length ? "You suspect: " + pred.map(id => escapeHtml(nameOf(id))).join(", ") : "No suspects yet",
+    `<span class="muted">Tap everyone you suspect. You score a point for each Traitor you name and lose one for each Faithful, at the end of the game.</span>
+    <div class="choices">${living.map(id => chip(id, pred.includes(id), "data-gpred")).join("")}</div>`);
   if (voteKey){
-    html += `<div class="ghost-block"><b>Bet: who will be banished?</b><span class="muted">One point if you're right. Bets lock when the vote closes.</span>
-      <div class="choices">${living.map(id => chip(id, bets[voteKey] === id, "data-gbetv")).join("")}</div></div>`;
+    html += section("betv", "Bet: who will be banished?", bets[voteKey] ? "Your bet: " + escapeHtml(nameOf(bets[voteKey])) : "No bet yet",
+      `<span class="muted">One point if you're right. Bets lock when the vote closes.</span>
+      <div class="choices">${living.map(id => chip(id, bets[voteKey] === id, "data-gbetv")).join("")}</div>`);
   }
   if (murderKey){
-    html += `<div class="ghost-block"><b>Bet: who will be murdered next?</b><span class="muted">One point if you're right. Bets lock when breakfast begins.</span>
-      <div class="choices">${living.map(id => chip(id, bets[murderKey] === id, "data-gbetm")).join("")}</div></div>`;
+    html += section("betm", "Bet: who will be murdered next?", bets[murderKey] ? "Your bet: " + escapeHtml(nameOf(bets[murderKey])) : "No bet yet",
+      `<span class="muted">One point if you're right. Bets lock when breakfast begins.</span>
+      <div class="choices">${living.map(id => chip(id, bets[murderKey] === id, "data-gbetm")).join("")}</div>`);
   }
   stage.innerHTML = html;
 }
+// Remember which sections are open so a refresh of the panel doesn't snap them shut.
+$("ghostStage").addEventListener("toggle", e => {
+  const d = e.target; if (!d || !d.dataset || !d.dataset.gsec) return;
+  if (d.open) ghostOpen.add(d.dataset.gsec); else ghostOpen.delete(d.dataset.gsec);
+}, true);
 $("ghostStage").addEventListener("click", e => {
   const v = currentVote(), g = myGhostDoc();
   const gv = e.target.closest("[data-gvote]");
