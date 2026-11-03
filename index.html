@@ -2484,6 +2484,11 @@ function fireChoices(f){
 }
 async function startFirePit(){
   const living = livingIds();
+  // Note who reached the Fire Pit (first time only) and which of them were Faithful then.
+  if (!(statsNow().events || []).some(e => e.type === "firepit")){
+    const R = roleMap();
+    await logEvent({ type:"firepit", players: living, faithful: living.filter(id => R[id] === "faithful") });
+  }
   try {
     const v = currentVote(); if (v && v.phase === "done") await putVote({ ...v, phase:"closed" });
     const round = (fireState()?.round || 0) + 1;
@@ -3230,8 +3235,10 @@ function computeAwards(plan){
   w = best(everFaithful, "shortlisted", "max");
   if (w.length && get("shortlisted", w[0]) > 0) out.push({ title: "On the Menu", desc: "Shortlisted for murder the most times", ids: w, line: "shortlisted " + plural(get("shortlisted", w[0]), "time", "times") });
 
-  const untouched = everFaithful.filter(id => get("shortlisted", id) === 0);
-  if (untouched.length) out.push({ title: "Untouchable", desc: "Never shortlisted for murder", ids: untouched, line: "never shortlisted" });
+  // Only Faithful who made it to the Fire Pit can be Untouchable.
+  const fp = (s.events || []).find(e => e.type === "firepit");
+  const untouched = fp ? (fp.faithful || []).filter(id => get("shortlisted", id) === 0) : [];
+  if (untouched.length) out.push({ title: "Untouchable", desc: "Reached the Fire Pit as a Faithful without ever being shortlisted for murder", ids: untouched, line: "never shortlisted" });
 
   const traitorsEver = all.filter(id => plan.allRoles[id] === "traitor" || start[id] === "traitor");
   w = best(traitorsEver, "murderPicks", "max");
@@ -3331,67 +3338,142 @@ function tallyText(v){
   const n = Object.values(c).sort((a, b) => b - a);
   return n.length ? n.join("–") : "—";
 }
-function chartHtml(){
+// One model feeds both the on-screen table and the downloadable image.
+function chartModel(){
   const data = buildChart(), { cols, elim } = data;
-  if (!cols.length) return `<p class="muted" style="margin:0">Nothing has happened yet, so there's no chart to show.</p>`;
-  const S = allStatus();
+  if (!cols.length) return null;
+  const st = statsNow(), events = st.events || [];
   const everyone = allPlayers().map(p => p.id).filter(id => roleMap()[id] || data.start[id] || data.finalRoles[id]);
-  // Order: still standing at the end first, then everyone else by how late they went out.
-  const lastOut = id => { const l = elim[id]; return l && l.length && l[l.length - 1].end == null ? l[l.length - 1].col : Infinity; };
-  const rows = everyone.slice().sort((a, b) => lastOut(b) - lastOut(a));
-  const nm = id => escapeHtml(nameOf(id));
-  const roleCls = id => roleOf(data, id) === "traitor" ? "ch-traitor" : "ch-faithful";
-
-  let h = `<div class="chart-wrap"><table class="game-chart"><thead>`;
-  h += `<tr><th class="ch-label">Round</th>${cols.map((c, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
-  // Traitors' decision
-  h += `<tr><th class="ch-label">Traitors' decision</th>${cols.map(c => {
+  // Order of elimination: anyone still standing at the end on top, then the most recent
+  // elimination down to the very first one out at the bottom.
+  const outAt = {};
+  events.forEach((e, i) => { if (e.type === "elim") outAt[e.id] = i; if (e.type === "revive") delete outAt[e.id]; });
+  const rowsOrder = everyone.slice().sort((a, b) => (outAt[b] ?? Infinity) - (outAt[a] ?? Infinity));
+  const nameTxt = id => nameOf(id);
+  const roleCell = id => roleOf(data, id) === "traitor" ? "traitor" : "faithful";
+  const rows = [];
+  rows.push({ label: "Round", head: true, cells: cols.map((c, i) => ({ text: String(i + 1), cls: "head" })) });
+  rows.push({ label: "Traitors' decision", head: true, cells: cols.map(c => {
     const n = c.night, ms = c.murders.map(m => m.id);
-    if (n && n.kind === "recruit") return `<td class="ch-traitor">${nm(n.id)}<small>Recruited</small></td>`;
-    if (ms.length) return `<td class="${roleOf(data, ms[0]) === "traitor" ? "ch-traitor" : "ch-faithful"}">${ms.map(nm).join(", ")}<small>${n && n.mode === "plain" ? "Murder in plain sight" : n && n.mode === "chain" ? "Safety Chain murder" : "Murder"}</small></td>`;
-    if (n && n.kind === "shielded") return `<td class="ch-plain">None<small>Saved by a shield</small></td>`;
-    if (n) return `<td class="ch-plain">None<small>${n.mode === "plain" ? "Plain sight failed" : "No murder"}</small></td>`;
-    return `<td class="ch-plain">—</td>`;
-  }).join("")}</tr>`;
-  // Shield
-  h += `<tr><th class="ch-label">Shield</th>${cols.map(c => `<td class="ch-plain">${c.night && (c.night.shields || []).length ? c.night.shields.map(nm).join(", ") : c.night ? "None" : "—"}</td>`).join("")}</tr>`;
-  // Banishment
-  h += `<tr><th class="ch-label">Banishment</th>${cols.map(c => c.banished
-    ? `<td class="${(c.banished.role || roleOf(data, c.banished.id)) === "traitor" ? "ch-traitor" : "ch-faithful"}">${nm(c.banished.id)}${c.votes.some(v => v.endgame) ? "<small>Fire Pit</small>" : ""}</td>`
-    : `<td class="ch-plain">None</td>`).join("")}</tr>`;
-  // Vote tally
-  h += `<tr class="ch-sep"><th class="ch-label">Vote</th>${cols.map(c => {
-    if (!c.votes.length) return `<td class="ch-plain">—</td>`;
-    const first = c.votes[0], rest = c.votes.slice(1);
-    return `<td class="ch-plain">${tallyText(first)}${rest.map(r => `<small>Revote ${tallyText(r)}</small>`).join("")}</td>`;
-  }).join("")}</tr></thead><tbody>`;
-  // One row per player
-  rows.forEach(id => {
+    if (n && n.kind === "recruit") return { text: nameTxt(n.id), sub: ["Recruited"], cls: "traitor" };
+    if (ms.length) return { text: ms.map(nameTxt).join(", "), sub: [n && n.mode === "plain" ? "Murder in plain sight" : n && n.mode === "chain" ? "Safety Chain murder" : "Murder"], cls: roleCell(ms[0]) };
+    if (n && n.kind === "shielded") return { text: "None", sub: ["Saved by a shield"], cls: "plain" };
+    if (n) return { text: "None", sub: [n.mode === "plain" ? "Plain sight failed" : "No murder"], cls: "plain" };
+    return { text: "—", cls: "plain" };
+  }) });
+  rows.push({ label: "Shield", head: true, cells: cols.map(c => ({ text: c.night && (c.night.shields || []).length ? c.night.shields.map(nameTxt).join(", ") : c.night ? "None" : "—", cls: "plain" })) });
+  rows.push({ label: "Banishment", head: true, cells: cols.map(c => c.banished
+    ? { text: nameTxt(c.banished.id), sub: c.votes.some(v => v.endgame) ? ["Fire Pit"] : [], cls: (c.banished.role || roleOf(data, c.banished.id)) === "traitor" ? "traitor" : "faithful" }
+    : { text: "None", cls: "plain" }) });
+  rows.push({ label: "Vote", head: true, sep: true, cells: cols.map(c => c.votes.length
+    ? { text: tallyText(c.votes[0]), sub: c.votes.slice(1).map(r => "Revote " + tallyText(r)), cls: "plain" }
+    : { text: "—", cls: "plain" }) });
+  rowsOrder.forEach(id => {
     const startRole = data.start[id] || roleOf(data, id), endRole = roleOf(data, id);
-    const bar = startRole === endRole ? `ch-bar-${endRole}` : `ch-bar-${startRole} ch-bar-split`;
-    h += `<tr><th class="ch-name ${bar}">${nm(id)}</th>`;
     const spans = (elim[id] || []).map(e => ({ ...e, end: e.end == null ? cols.length : e.end }));
+    const cells = [];
     for (let i = 0; i < cols.length; ){
       const sp = spans.find(e => e.col === i && e.end > i);
       if (sp){
-        const lastRound = sp.kind === "Banished" ? sp.col : sp.col + 1;
-        h += `<td colspan="${sp.end - i}" class="${sp.kind === "Murdered" ? "ch-murdered" : "ch-banished"}">${sp.kind}<small>Round ${lastRound}</small></td>`;
+        cells.push({ text: sp.kind, sub: ["Round " + (sp.kind === "Banished" ? sp.col : sp.col + 1)], cls: sp.kind === "Murdered" ? "murdered" : "banished", span: sp.end - i });
         i = sp.end; continue;
       }
       const c = cols[i];
-      const cell = c.votes.map((v, k) => {
-        const t = (v.votes || {})[id]; if (!t && k === 0) return "—"; if (!t) return "";
-        const w = (v.weights || {})[id] === 2 ? " ×2" : "";
-        return k === 0 ? nm(t) + w : `<small>Revote: ${nm(t)}${w}</small>`;
-      }).join("");
-      h += `<td>${c.votes.length ? cell : ""}</td>`;
+      if (!c.votes.length){ cells.push({ text: "", cls: "" }); i++; continue; }
+      const first = (c.votes[0].votes || {})[id];
+      const w = v => ((v.weights || {})[id] === 2 ? " ×2" : "");
+      cells.push({ text: first ? nameTxt(first) + w(c.votes[0]) : "—", sub: c.votes.slice(1).map(v => (v.votes || {})[id] ? "Revote: " + nameTxt(v.votes[id]) + w(v) : "").filter(Boolean), cls: "" });
       i++;
     }
-    h += `</tr>`;
+    rows.push({ label: nameTxt(id), player: true, startRole, endRole, cells });
+  });
+  return { ncols: cols.length, rows };
+}
+function chartHtml(){
+  const m = chartModel();
+  if (!m) return `<p class="muted" style="margin:0">Nothing has happened yet, so there's no chart to show.</p>`;
+  const cellHtml = (c, tag) => `<${tag}${c.span > 1 ? ` colspan="${c.span}"` : ""}${c.cls && c.cls !== "head" ? ` class="ch-${c.cls}"` : ""}>${escapeHtml(c.text)}${(c.sub || []).map(x => `<small>${escapeHtml(x)}</small>`).join("")}</${tag}>`;
+  let h = `<div class="chart-wrap"><table class="game-chart"><thead>`;
+  m.rows.filter(r => r.head).forEach(r => {
+    h += `<tr${r.sep ? ' class="ch-sep"' : ""}><th class="ch-label">${escapeHtml(r.label)}</th>${r.cells.map(c => cellHtml(c, c.cls === "head" ? "th" : "td")).join("")}</tr>`;
+  });
+  h += `</thead><tbody>`;
+  m.rows.filter(r => r.player).forEach(r => {
+    const bar = r.startRole === r.endRole ? `ch-bar-${r.endRole}` : `ch-bar-${r.startRole} ch-bar-split`;
+    h += `<tr><th class="ch-name ${bar}">${escapeHtml(r.label)}</th>${r.cells.map(c => cellHtml(c, "td")).join("")}</tr>`;
   });
   h += `</tbody></table></div>
     <p class="muted" style="margin:0;font-size:.85rem">Blue is Faithful, red is Traitor. A split name bar means the player was recruited or revived into a new role. "×2" marks a Dagger vote.</p>`;
   return h;
+}
+
+/* ----- the chart as a downloadable picture ----- */
+const CHART_COLORS = {
+  head: ["#e2ddd1", "#1d1b17"], plain: ["#fbf9f4", "#1d1b17"], "": ["#f3efe6", "#1d1b17"],
+  faithful: ["#2557a7", "#ffffff"], traitor: ["#6e1430", "#ffffff"],
+  murdered: ["#7b1712", "#ffffff"], banished: ["#e3867a", "#2a0f0b"], label: ["#e2ddd1", "#1d1b17"], name: ["#ebe6db", "#1d1b17"]
+};
+function chartCanvas(){
+  const m = chartModel(); if (!m) return null;
+  const SCALE = 2, PAD = 10, LINE = 20, SUB = 15, BAR = 8;
+  const mainFont = "600 15px Spectral, Georgia, serif", subFont = "italic 12px Spectral, Georgia, serif", labelFont = "700 15px Spectral, Georgia, serif";
+  const meas = document.createElement("canvas").getContext("2d");
+  const w = (t, f) => { meas.font = f; return meas.measureText(t || "").width; };
+  const cellW = c => Math.max(w(c.text, mainFont), ...(c.sub || []).map(x => w(x, subFont)), 0) + PAD * 2;
+  const labelW = Math.max(...m.rows.map(r => w(r.label, labelFont))) + PAD * 2 + BAR + 6;
+  const colW = Array(m.ncols).fill(70);
+  m.rows.forEach(r => { let i = 0; r.cells.forEach(c => { if (!(c.span > 1)) colW[i] = Math.max(colW[i], cellW(c)); i += c.span || 1; }); });
+  const rowH = m.rows.map(r => PAD + LINE + Math.max(0, ...r.cells.map(c => (c.sub || []).length)) * SUB + PAD - 4);
+  const TITLE = 54, totalW = labelW + colW.reduce((a, b) => a + b, 0), totalH = TITLE + rowH.reduce((a, b) => a + b, 0) + 6 * 1 + 34;
+  const cv = document.createElement("canvas");
+  cv.width = Math.ceil((totalW + 32) * SCALE); cv.height = Math.ceil((totalH + 16) * SCALE);
+  const x = cv.getContext("2d"); x.scale(SCALE, SCALE);
+  x.fillStyle = "#0f1311"; x.fillRect(0, 0, totalW + 32, totalH + 16);
+  x.fillStyle = "#c9a35c"; x.font = "400 26px 'IM Fell English SC', Georgia, serif"; x.textBaseline = "middle"; x.textAlign = "left";
+  x.fillText("The Traitors · Game chart", 16, 30);
+  const ox = 16, oy = TITLE;
+  const box = (bx, by, bw, bh, key) => { const [bg] = CHART_COLORS[key] || CHART_COLORS[""]; x.fillStyle = bg; x.fillRect(bx, by, bw, bh); x.strokeStyle = "#b9b3a5"; x.lineWidth = 1; x.strokeRect(bx + .5, by + .5, bw - 1, bh - 1); };
+  const text = (c, bx, by, bw, bh, key, font) => {
+    const [, fg] = CHART_COLORS[key] || CHART_COLORS[""];
+    const subs = c.sub || [], h = LINE + subs.length * SUB, top = by + (bh - h) / 2;
+    x.fillStyle = fg; x.textAlign = "center"; x.font = font || mainFont; x.fillText(c.text || "", bx + bw / 2, top + LINE / 2);
+    x.font = subFont; subs.forEach((s, k) => x.fillText(s, bx + bw / 2, top + LINE + k * SUB + SUB / 2));
+  };
+  let y = oy;
+  m.rows.forEach((r, ri) => {
+    const h = rowH[ri];
+    // label cell
+    box(ox, y, labelW, h, r.player ? "name" : "label");
+    if (r.player){
+      const top = r.startRole === "traitor" ? "#6e1430" : "#2557a7", bot = r.endRole === "traitor" ? "#6e1430" : "#2557a7";
+      x.fillStyle = top; x.fillRect(ox, y, BAR, h / 2); x.fillStyle = bot; x.fillRect(ox, y + h / 2, BAR, h / 2);
+      x.fillStyle = "#1d1b17"; x.font = labelFont; x.textAlign = "left"; x.fillText(r.label, ox + BAR + PAD, y + h / 2);
+    } else text({ text: r.label }, ox, y, labelW, h, "label", labelFont);
+    let cx = ox + labelW, ci = 0;
+    r.cells.forEach(c => {
+      const span = c.span || 1, cw = colW.slice(ci, ci + span).reduce((a, b) => a + b, 0);
+      const key = c.cls === "head" ? "head" : (c.cls || "");
+      box(cx, y, cw, h, key); text(c, cx, y, cw, h, key, c.cls === "head" ? labelFont : mainFont);
+      cx += cw; ci += span;
+    });
+    y += h;
+    if (r.sep){ x.fillStyle = "#1d1b17"; x.fillRect(ox, y, totalW, 6); y += 6; }
+  });
+  x.fillStyle = "#9a9a8c"; x.font = "italic 12px Spectral, Georgia, serif"; x.textAlign = "left";
+  x.fillText("Blue: Faithful · Red: Traitor · Split bar: role changed · ×2: Dagger vote", 16, y + 20);
+  return cv;
+}
+async function downloadChart(){
+  const cv = chartCanvas(); if (!cv){ toast("There's no chart yet"); return; }
+  const blob = await new Promise(r => cv.toBlob(r, "image/png"));
+  if (!blob){ toast("The image couldn't be made. Try again."); return; }
+  const file = new File([blob], "traitors-game-chart.png", { type: "image/png" });
+  // Phones: the share sheet lets people save to Photos. Elsewhere: a normal download.
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })){ await navigator.share({ files: [file], title: "The Traitors game chart" }); return; } } catch(e){ if (e && e.name === "AbortError") return; }
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = "traitors-game-chart.png"; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast("Chart image saved");
 }
 function renderChart(){
   const st = $("chartStage");
@@ -3399,9 +3481,12 @@ function renderChart(){
   const show = chartOpen && isHostView() && !!(f && f.phase === "finale" && f.winner);
   st.hidden = !show;
   if (!show) return;
-  st.innerHTML = `<div class="chart-head"><div><span class="kicker">After the game</span><h3>The game chart</h3></div><button class="btn small" type="button" data-chart="close">Close chart</button></div>${chartHtml()}`;
+  st.innerHTML = `<div class="chart-head"><div><span class="kicker">After the game</span><h3>The game chart</h3></div><div class="acts" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small solid" type="button" data-chart="download">Download as image</button><button class="btn small" type="button" data-chart="close">Close chart</button></div></div>${chartHtml()}`;
 }
-$("chartStage").addEventListener("click", e => { if (e.target.closest("[data-chart='close']")){ chartOpen = false; renderChart(); } });
+$("chartStage").addEventListener("click", e => {
+  if (e.target.closest("[data-chart='close']")){ chartOpen = false; renderChart(); }
+  else if (e.target.closest("[data-chart='download']")) downloadChart().catch(() => toast("The image couldn't be made. Try again."));
+});
 
 renderWall();
 boot();
