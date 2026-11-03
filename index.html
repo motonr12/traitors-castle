@@ -293,6 +293,37 @@ html.screen-mode,body.screen-mode{height:100%}
 .announce-composer textarea{background:var(--stone-2);border:1px solid var(--brass-dim);color:var(--parchment);padding:12px 14px;font:inherit;width:100%;min-width:0;resize:vertical}
 .announce-composer textarea:focus-visible{outline:2px solid var(--parchment);outline-offset:3px}
 @media (prefers-reduced-motion:reduce){.announce{animation:none}}
+.award-list{display:flex;flex-direction:column;gap:8px;width:100%;max-width:720px;margin-inline:auto;text-align:left}
+.award-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--brass-dim);background:var(--stone)}
+.award-row.current{border-color:var(--brass);box-shadow:inset 0 0 0 1px var(--brass)}
+.award-row-text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.award-row-text b{font-family:var(--font-display);font-weight:400;font-size:1.1rem;color:var(--brass);letter-spacing:.05em}
+.award-row-text span{overflow-wrap:anywhere}
+.task-list{display:flex;flex-direction:column;gap:8px;width:100%;max-width:620px;margin-inline:auto;text-align:left}
+.task-opt{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--brass-dim);background:var(--stone);color:var(--parchment);font:inherit;cursor:pointer;text-align:left;min-width:0}
+.task-opt span:last-child{overflow-wrap:anywhere}
+.task-opt[aria-checked="true"]{border-color:var(--blood);background:rgba(158,43,37,.25)}
+.task-opt:focus-visible{outline:2px solid var(--parchment);outline-offset:2px}
+.task-num{font-family:var(--font-display);color:var(--brass);min-width:1.2em}
+.chart-stage{text-align:left}
+.chart-head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-end}
+.chart-head h3{text-align:left}
+.chart-wrap{overflow-x:auto;max-width:100%;border:1px solid var(--brass-dim)}
+.game-chart{border-collapse:collapse;font-size:.88rem;font-variant-numeric:tabular-nums;min-width:100%;background:#f3efe6;color:#1d1b17}
+.game-chart th,.game-chart td{border:1px solid #b9b3a5;padding:6px 10px;text-align:center;white-space:nowrap;vertical-align:middle}
+.game-chart small{display:block;font-size:.72rem;font-style:italic;opacity:.85}
+.game-chart thead th{background:#e2ddd1;font-weight:700}
+.game-chart .ch-label{background:#e2ddd1;text-align:center;font-weight:700;position:sticky;left:0;z-index:1}
+.game-chart .ch-name{position:sticky;left:0;z-index:1;background:#ebe6db;font-weight:700;text-align:left;padding-left:16px;border-left-width:8px}
+.game-chart .ch-bar-faithful{border-left-color:#2557a7}
+.game-chart .ch-bar-traitor{border-left-color:#6e1430}
+.game-chart .ch-bar-split{border-left-style:double}
+.game-chart td.ch-faithful{background:#2557a7;color:#fff}
+.game-chart td.ch-traitor{background:#6e1430;color:#fff}
+.game-chart td.ch-plain{background:#fbf9f4}
+.game-chart td.ch-murdered{background:#7b1712;color:#fff}
+.game-chart td.ch-banished{background:#e3867a;color:#2a0f0b}
+.game-chart tr.ch-sep th,.game-chart tr.ch-sep td{border-bottom:6px solid #1d1b17}
 .final-traitor{color:#f0b8b2}
 .final-faithful{color:var(--brass)}
 .screen-mode .fire-row{flex-wrap:nowrap}
@@ -417,6 +448,7 @@ html.screen-mode,body.screen-mode{height:100%}
     <section id="powersStage" class="stage powers-stage" hidden></section>
     <section id="chainStage" class="stage chain-stage" hidden aria-live="polite"></section>
     <section id="ghostStage" class="stage ghost-stage" hidden></section>
+    <section id="chartStage" class="stage chart-stage" hidden></section>
     <section id="turretStage" class="stage turret-stage" hidden aria-live="polite"></section>
     <section id="voteStage" class="stage" hidden aria-live="polite"></section>
     <section id="fireStage" class="stage fire-stage" hidden aria-live="polite"></section>
@@ -485,7 +517,7 @@ let photoData = null;
 let pendingRemove = null;
 let subsStarted = false;
 let game = { started:false }, roles = {}, myRole = null;   // live game
-let statusRoles = {}, myAllies = [], myRecruitedRound = null, myRevivedRound = null;                        // revealed roles, fellow traitors
+let statusAt = {}, statusRoles = {}, myAllies = [], myRecruitedRound = null, myRevivedRound = null;                        // revealed roles, fellow traitors
 let liveVote = null, liveVotes = {}, myLiveVote = null;     // voting
 let gbConfirm = null, revealed = false, hideRoles = false;  // local UI state
 
@@ -612,8 +644,8 @@ function startSubs(){
     renderWall();
   }, ()=>{});
   db.collection("status").onSnapshot(s => {
-    statuses = {}; statusRoles = {};
-    s.docs.forEach(d => { if (d.exists){ const v = d.data(); statuses[d.id] = v.state; if (v.role) statusRoles[d.id] = v.role; } });
+    statuses = {}; statusRoles = {}; statusAt = {};
+    s.docs.forEach(d => { if (d.exists){ const v = d.data(); statuses[d.id] = v.state; statusAt[d.id] = v.at || 0; if (v.role) statusRoles[d.id] = v.role; } });
     renderWall();
   }, ()=>{});
   db.doc("game/vote").onSnapshot(s => { liveVote = s.exists ? s.data() : null; renderWall(); }, ()=>{});
@@ -694,7 +726,7 @@ async function startGame(){
   if (isTrial()){
     const gs = !!trialGame.ghostSetting, ss = trialGame.screenSetting !== false;
     trialGame = { started:true, traitors:t, players:n, roles:assign, ghostSetting: gs, ghostMode: gs, screenSetting: ss, noScreen: !ss }; trialStatus = {}; trialVotes = {}; trialPicks = {};
-    trialGame.stats = { startRoles: assign };
+    trialGame.stats = { startRoles: assign, events: [] };
     saveTrial(); revealed = false; renderWall(); toast("The game has begun"); return;
   }
   try {
@@ -1114,6 +1146,18 @@ $("hostCardRemove").addEventListener("click", async () => {
   catch(_){ toast("That didn't save. Try again."); }
 });
 
+// Finishing places: the first player out takes last place, the next one the place above, and so on.
+const elimAt = () => isTrial() ? (trialGame.statusAt || {}) : statusAt;
+function ordinal(n){ const v = n % 100; return n + (v >= 11 && v <= 13 ? "th" : ({ 1:"st", 2:"nd", 3:"rd" }[n % 10] || "th")); }
+function placements(){
+  const S = allStatus(), at = elimAt(), R = roleMap();
+  if (!gameState().started) return {};
+  const inGame = allPlayers().filter(p => R[p.id] || S[p.id] || !Object.keys(R).length).map(p => p.id);
+  const total = Math.max(gameState().players || 0, inGame.length);
+  const out = {};
+  inGame.filter(id => S[id]).sort((a, b) => (at[a] || 0) - (at[b] || 0)).forEach((id, i) => { out[id] = total - i; });
+  return out;
+}
 function renderWall(){
   renderGameBar();
   renderVote(false);
@@ -1122,6 +1166,7 @@ function renderWall(){
   renderFire(false);
   renderGhost(false);
   renderAnnounce();
+  renderChart();
   if (!isHostView()) $("announceComposer").hidden = true;
   renderPlainStage();
   renderChain(false);
@@ -1148,7 +1193,9 @@ function renderWall(){
   const host = role === "host" || (isTrial() && trialView === "host");
   const showYou = role === "player" || (isTrial() && trialView === "player");
   wall.innerHTML = "";
-  const ordered = players.filter(p => !statuses[p.id]).concat(players.filter(p => statuses[p.id]));
+  // Living first; then the eliminated by finishing place, last place at the very bottom.
+  const place = placements();
+  const ordered = players.filter(p => !statuses[p.id]).concat(players.filter(p => statuses[p.id]).sort((a, b) => (place[a.id] || 0) - (place[b.id] || 0)));
   ordered.forEach((p,i) => {
     const s = statuses[p.id];
     const card = document.createElement("article");
@@ -1163,7 +1210,7 @@ function renderWall(){
     if (s){ const st = document.createElement("div"); st.className="stamp"; st.textContent = s==="murdered"?"MURDERED":"BANISHED"; canvas.appendChild(st); }
     frame.appendChild(canvas);
     if (p.id === me && showYou){ const y=document.createElement("span"); y.className="you-tag"; y.textContent="YOU"; frame.appendChild(y); }
-    const plaque = document.createElement("div"); plaque.className="plaque"; plaque.textContent = p.name || "Unnamed";
+    const plaque = document.createElement("div"); plaque.className="plaque"; plaque.textContent = (p.name || "Unnamed") + (s && place[p.id] ? " · " + ordinal(place[p.id]) : "");
     card.append(frame, plaque);
     const pub = revealedRole(p.id), r = roleMap()[p.id];
     let tagRole = null, tagText = "";
@@ -1206,9 +1253,12 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;",
 
 async function setStatus(id, state, opts){
   const hide = !!(opts && opts.hideRole);
+  if (state && gameState().started && !allStatus()[id]) await logEvent({ type:"elim", id, state, role: roleMap()[id] || null });
   if (isTrial()){
     trialGame.hidden = trialGame.hidden || {};
     if (state) trialStatus[id] = state; else delete trialStatus[id];
+    trialGame.statusAt = trialGame.statusAt || {};
+    if (state){ if (!trialGame.statusAt[id]) trialGame.statusAt[id] = Date.now(); } else delete trialGame.statusAt[id];
     if (state && hide) trialGame.hidden[id] = true; else delete trialGame.hidden[id];
     saveTrial(); renderWall(); return;
   }
@@ -1691,8 +1741,12 @@ let liveMurder = null, murderPlan = null;
 let trialPicks = {};
 const PLAIN_TASKS = [
   "Record yourself taking a shot with your victim.",
-  "Write your victim's name on a cup with a heart, and get them to drink from it.",
-  "Take a selfie with your victim while they make a peace sign."
+  "Take a selfie with your victim while they make a peace sign.",
+  "Make a Boomerang with your victim clinking your drinks together. Their face has to be in the frame.",
+  "Get your victim to say \"I am a Faithful\" on camera.",
+  "Take a photo of your victim without them noticing, with the bar's sign or menu in the frame.",
+  "Get your victim to high-five you on camera.",
+  "Take a photo of your victim's drink with a heart drawn on a napkin beside it. Your victim must be in the photo as well."
 ];
 let livePlain = null;
 const plainAnnounced = () => isTrial() ? !!trialGame.plainAnnounce : !!(livePlain && livePlain.active);
@@ -1705,6 +1759,7 @@ function renderPlainStage(){
   const st = $("plainStage");
   if (st.hidden === show){ st.hidden = !show; applyScreenLayout(); }
 }
+let plainTask = null;
 let hostMips = null, plainSetup = false, plainSel = null, plainMinutes = 20;
 const mipsUsed = () => isTrial() ? !!trialGame.mipsUsed : !!(hostMips && hostMips.used);
 let turretSel = [], turretSelKey = "", turretSaving = false, turretBusy = false, turretKey = "", lastFanKey = "";
@@ -1799,7 +1854,7 @@ async function applyRecruit(id, round){
 }
 
 /* ----- murder in plain sight ----- */
-async function startPlainSight(minutes){
+async function startPlainSight(minutes, taskIndex){
   if (mipsUsed() || turretOrMurderBusy() || voteBusy()) return;
   const R = roleMap(), living = livingIds();
   const traitors = living.filter(id => R[id] === "traitor");
@@ -1808,7 +1863,7 @@ async function startPlainSight(minutes){
   if (!candidates.length){ toast("There are no Faithful left to murder"); return; }
   const mins = Math.max(1, Math.min(240, Math.round(minutes) || 20));
   const now = Date.now();
-  const task = PLAIN_TASKS[Math.floor(Math.random() * PLAIN_TASKS.length)];
+  const task = PLAIN_TASKS[taskIndex] || PLAIN_TASKS[Math.floor(Math.random() * PLAIN_TASKS.length)];
   try {
     if (isTrial()) trialGame.mipsUsed = true; else await db.doc("host/mips").set({ used: true, at: now });
     await setTurret({ round: (turretState()?.round || 0) + 1, mode:"plain", phase:"task", phaseAt: now, task, deadline: now + mins * 60000, minutes: mins,
@@ -1904,7 +1959,7 @@ async function startMurder(){
   const ghostBetsLocked = ghostModeOn() ? snapshotBets("m" + round) : {};
   const PP = picksMap();
   const pickers = victim ? (t.traitors || []).filter(id => { const p = PP[id]; if (!p || p.round !== t.round) return false; return (p.noms && p.noms.length) ? p.noms.includes(victim) : p.vote === victim; }) : [];
-  const plan = { round, pickers, ghostBets: ghostBetsLocked, victim: shielded ? null : victim, saved: shielded && !recruit && !failed ? victim : null, recruit: recruit ? victim : null, batches, finalSafe };
+  const plan = { round, mode: t.mode || "murder", shields: livingIds().filter(id => hasShield(id)), pickers, ghostBets: ghostBetsLocked, victim: shielded ? null : victim, saved: shielded && !recruit && !failed ? victim : null, recruit: recruit ? victim : null, batches, finalSafe };
   const pub = { round, phase:"reveal", stage: batches.length ? "batches" : "suspense", startedAt: now,
     nextAt: now + (batches.length ? FIRST_BATCH_MS : FINAL_MS), total: field.length, shown: [], final: null, plain: t.mode === "plain" };
   try {
@@ -2018,6 +2073,7 @@ async function turretAutomation(){
         await putMurder({ ...m, shown, stage: last ? "suspense" : "batches", nextAt: now + (last ? FINAL_MS : BATCH_MS), lastAt: now });
       } else if (m.stage === "suspense"){
         await putMurder({ ...m, stage:"done", phase:"done", final: { safe: plan.finalSafe, victim: plan.victim || null }, lastAt: now });
+        await logEvent({ type:"night", kind: plan.recruit ? "recruit" : plan.victim ? "murder" : plan.saved ? "shielded" : "none", id: plan.recruit || plan.victim || plan.saved || null, mode: plan.mode || "murder", shields: plan.shields || [] });
         if (plan.victim) await setStatus(plan.victim, "murdered");
         if (plan.victim) await scoreBets(plan.ghostBets, plan.victim, "Murder");
         if (plan.victim) await recordMurder(plan.victim, plan.pickers).catch(()=>{});
@@ -2043,11 +2099,12 @@ function renderTurret(force){
   let html = "", key = "";
 
   if (host && gameState().started && plainSetup && !turretActive() && !murderActive()){
-    key = ["plainsetup", plainMinutes].join("|");
-    html = `<span class="kicker">Murder in plain sight</span><h3>Set the Traitors' time limit</h3>
-      <p style="margin:0;max-width:56ch;margin-inline:auto">The Traitors get a random task to complete without being caught. Only you will see the time limit. This can only be used once per game.</p>
-      <div class="field" style="max-width:220px;margin-inline:auto;text-align:center"><label for="plainMins">Minutes</label><input id="plainMins" type="number" min="1" max="240" value="${plainMinutes}" inputmode="numeric"></div>
-      <div class="acts"><button class="btn solid" type="button" data-turret="plain-start">Give the Traitors their task</button><button class="link" type="button" data-turret="plain-cancel">Cancel</button></div>`;
+    key = ["plainsetup", plainMinutes, plainTask].join("|");
+    html = `<span class="kicker">Murder in plain sight</span><h3>Choose the Traitors' task</h3>
+      <p style="margin:0;max-width:56ch;margin-inline:auto">The Traitors must complete this task without being caught. Only you will see the time limit. This can only be used once per game.</p>
+      <div class="task-list" role="radiogroup" aria-label="Task">${PLAIN_TASKS.map((t, i) => `<button class="task-opt" type="button" role="radio" aria-checked="${plainTask === i}" data-plaintask="${i}"><span class="task-num">${i + 1}</span><span>${escapeHtml(t)}</span></button>`).join("")}</div>
+      <div class="field" style="max-width:220px;margin-inline:auto;text-align:center"><label for="plainMins">Time limit (minutes)</label><input id="plainMins" type="number" min="1" max="240" value="${plainMinutes}" inputmode="numeric"></div>
+      <div class="acts"><button class="btn solid" type="button" data-turret="plain-start" ${plainTask == null ? "disabled" : ""}>${plainTask == null ? "Choose a task" : "Give the Traitors their task"}</button><button class="link" type="button" data-turret="plain-cancel">Cancel</button></div>`;
   } else if (host && gameState().started && (turretActive() || murderActive())){
     if (!murderActive() && t.mode === "plain" && t.phase === "task"){
       const left = t.deadline - Date.now();
@@ -2195,6 +2252,8 @@ function renderTurret(force){
   stage.innerHTML = html;
 }
 $("turretStage").addEventListener("click", e => {
+  const pt = e.target.closest("[data-plaintask]");
+  if (pt){ const m = $("plainMins"); if (m) plainMinutes = parseInt(m.value, 10) || plainMinutes; plainTask = parseInt(pt.dataset.plaintask, 10); renderTurret(true); return; }
   if (e.target.closest("[data-act='reveal']")){ revealed = true; renderWall(); return; }
   const tsel = e.target.closest("[data-tsel]");
   if (tsel){
@@ -2223,7 +2282,7 @@ $("turretStage").addEventListener("click", e => {
   else if (a === "pick-recruit") submitDecide("recruit");
   else if (a === "offer-yes") answerOffer(true);
   else if (a === "offer-no") answerOffer(false);
-  else if (a === "plain-start"){ plainMinutes = parseInt(($("plainMins") || {}).value, 10) || 20; startPlainSight(plainMinutes); }
+  else if (a === "plain-start" && plainTask != null){ plainMinutes = parseInt(($("plainMins") || {}).value, 10) || 20; startPlainSight(plainMinutes, plainTask).then(() => { plainTask = null; }); }
   else if (a === "plain-cancel"){ plainSetup = false; renderWall(); }
   else if (a === "plain-confirm" && plainSel) resolvePlain(plainSel);
   else if (a === "plain-fail") resolvePlain(null);
@@ -2543,7 +2602,7 @@ function renderFire(force){
   const inGame = f.players.includes(myId());
   const choicesLive = host ? fireChoices(f) : {};
   const key = JSON.stringify([f.round, f.phase, f.decided, f.outcome, host, player, screen, mine, fireSaving, inGame, choicesLive, ownRole(),
-    f.current, f.tappedAt, f.shownAt, f.done, f.winner, f.awardStep, f.awardsDone, isTrial() ? (trialFpicks[TRIAL_ME] || {}).revealRole : null]);
+    f.current, f.tappedAt, f.shownAt, f.done, f.winner, f.awardMode, f.awardShown, (f.awardsRevealed || []).length, f.awardsBoard, isTrial() ? (trialFpicks[TRIAL_ME] || {}).revealRole : null]);
   if (key === fireKey && !force) return;
   fireKey = key;
   const kick = `<span class="kicker">The Fire Pit · Round ${f.round}</span>`;
@@ -2582,7 +2641,7 @@ function renderFire(force){
   } else if (f.phase === "finale"){
     const meId = myId();
     const revealedIds = Object.keys(f.revealed || {});
-    if (f.winner && f.awardStep != null){
+    if (f.winner && f.awardMode){
       html = awardsHtml(f, host ? "host" : (screen || noScreen()) ? "screen" : "phone");
     } else if (f.winner){
       const tw = f.winner === "traitors";
@@ -2599,7 +2658,7 @@ function renderFire(force){
       } else {
         html = `<span class="kicker">The end</span><h3 class="final-headline ${tw ? "final-traitor" : "final-faithful"}">${headline}</h3>
           <div class="fire-row winners">${winners.map(id => firePortrait(id, tw ? "TRAITOR" : "FAITHFUL", tw ? "traitor" : "")).join("")}</div>
-          <p class="stage-lede">${sub}</p>${player && !host ? (() => { const myTeam = ownRole(); const won = myTeam ? ((myTeam === "traitor") === tw) : null; return won === null ? "" : `<div class="verdict ${won ? "role-faithful" : "role-traitor"}">${won ? "You won." : "You lost."}</div>`; })() : ""}${ghostResultsHtml(f.ghostResults)}${host ? ((f.awards || []).length ? `<div class="acts"><button class="btn solid" type="button" data-fire="awards">Present the awards</button></div>` : `<p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>`) : ""}`;
+          <p class="stage-lede">${sub}</p>${player && !host ? (() => { const myTeam = ownRole(); const won = myTeam ? ((myTeam === "traitor") === tw) : null; return won === null ? "" : `<div class="verdict ${won ? "role-faithful" : "role-traitor"}">${won ? "You won." : "You lost."}</div>`; })() : ""}${ghostResultsHtml(f.ghostResults)}${host ? ((f.awards || []).length ? `<div class="acts"><button class="btn solid" type="button" data-fire="awards">Present the awards</button><button class="btn small" type="button" data-fire="chart">Game chart</button></div>` : `<div class="acts"><button class="btn small" type="button" data-fire="chart">Game chart</button></div><p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>`) : ""}`;
       }
     } else if (player && !host && !screen && screenOn()){
       const myTurn = f.current === meId && !f.tappedAt;
@@ -2648,6 +2707,8 @@ function renderFire(force){
   stage.querySelectorAll(".fire-player .plaque").forEach(el => { el.style.whiteSpace = "nowrap"; });
 }
 $("fireStage").addEventListener("click", e => {
+  const aw = e.target.closest("[data-award]");
+  if (aw){ revealAward(parseInt(aw.dataset.award, 10)); return; }
   const a = e.target.closest("[data-fire]")?.dataset.fire; if (!a) return;
   const f = fireState(); if (!f) return;
   if (a === "end" || a === "banish") submitFire(a);
@@ -2657,6 +2718,8 @@ $("fireStage").addEventListener("click", e => {
   else if (a === "finale") fireFinale(f.round, f.players).catch(()=> toast("That didn't save. Try again."));
   else if (a === "reveal-role") revealMyRole();
   else if (a === "awards") startAwards();
+  else if (a === "awards-board") showAwardsBoard();
+  else if (a === "chart"){ chartOpen = !chartOpen; renderChart(); if (chartOpen) $("chartStage").scrollIntoView({ behavior: "smooth", block: "start" }); }
   else if (a === "force-reveal") forceFinaleReveal();
 });
 setInterval(() => { fireAutomation(); }, 300);
@@ -3002,6 +3065,7 @@ async function revivePlayer(id){
   const round = Date.now();
   try {
     await setGhostMeta({ reviveUsed: true, revived: id, revivedAs: newRole });
+    await logEvent({ type:"revive", id, role: newRole });
     if (isTrial()){
       trialGame.roles[id] = newRole;
       delete trialStatus[id]; if (trialGame.hidden) delete trialGame.hidden[id];
@@ -3116,6 +3180,9 @@ const add = (o, id, n) => { o[id] = (o[id] || 0) + (n || 1); };
 // Every banishment vote, Round Table and Fire Pit alike.
 async function recordVoteStats(v, outcome){
   const R = roleMap();
+  const votes = {}, weights = {};
+  (v.revealed || []).forEach(r => { if (r.voter !== GHOSTS_ID){ votes[r.voter] = r.target || null; if ((r.weight || 1) > 1) weights[r.voter] = r.weight; } });
+  await logEvent({ type:"vote", round: v.round, revote: !!v.isRevote, endgame: !!v.endgame, votes, weights, ghost: (v.revealed || []).find(r => r.voter === GHOSTS_ID)?.target || null, outcome: outcome || null });
   await bumpStats(s => {
     (v.revealed || []).forEach(r => {
       if (!r.target) return;
@@ -3130,7 +3197,7 @@ async function recordVoteStats(v, outcome){
 }
 async function recordShortlist(ids){ await bumpStats(s => { ids.forEach(id => add(s.shortlisted, id)); }); }
 async function recordMurder(victim, pickers){ await bumpStats(s => { (pickers || []).forEach(id => add(s.murderPicks, id)); }); }
-async function recordStartRoles(assign){ await saveStats({ startRoles: assign, cast:{}, traitorVotes:{}, received:{}, shortlisted:{}, murderPicks:{}, closeCalls:{} }); }
+async function recordStartRoles(assign){ await saveStats({ startRoles: assign, events: [], cast:{}, traitorVotes:{}, received:{}, shortlisted:{}, murderPicks:{}, closeCalls:{} }); }
 
 function computeAwards(plan){
   const s = statsNow(), all = allPlayers().map(p => p.id).filter(id => plan.allRoles[id]);
@@ -3179,38 +3246,162 @@ function computeAwards(plan){
   return out;
 }
 
+// The host sees every award and who won it, and reveals them one at a time, in any order.
 async function startAwards(){
   const f = fireState(); if (!f || f.phase !== "finale" || !f.winner || !(f.awards || []).length) return;
-  try { await putFire({ ...f, awardStep: 0, awardAt: Date.now() }); } catch(_){ toast("The awards couldn't start. Try again."); }
+  try { await putFire({ ...f, awardMode: true, awardShown: null, awardsRevealed: [], awardsBoard: false }); } catch(_){ toast("The awards couldn't start. Try again."); }
 }
-async function awardsAutomation(f){
-  if (f.awardStep == null || f.awardsDone) return;
-  if (Date.now() < f.awardAt + AWARD_STEP_MS) return;
-  const step = f.awardStep + 1;
-  if (step >= f.awards.length) await putFire({ ...f, awardsDone: true });
-  else await putFire({ ...f, awardStep: step, awardAt: Date.now() });
+async function revealAward(i){
+  const f = fireState(); if (!f || !f.awardMode) return;
+  const revealedList = (f.awardsRevealed || []).includes(i) ? f.awardsRevealed : (f.awardsRevealed || []).concat([i]);
+  try { await putFire({ ...f, awardShown: i, awardsRevealed: revealedList, awardsBoard: false }); } catch(_){ toast("That didn't save. Try again."); }
 }
+async function showAwardsBoard(){
+  const f = fireState(); if (!f || !f.awardMode) return;
+  try { await putFire({ ...f, awardsBoard: true, awardShown: null }); } catch(_){ toast("That didn't save. Try again."); }
+}
+async function awardsAutomation(f){ /* awards are revealed by the host */ }
 function awardCard(a, big){
   return `<div class="award ${big ? "award-big" : ""}"><span class="kicker">Award</span><div class="award-title">${escapeHtml(a.title)}</div>
     <p class="muted" style="margin:0">${escapeHtml(a.desc)}</p>
     <div class="fire-row">${a.ids.map(id => firePortrait(id, "", "")).join("")}</div>
     <div class="award-line">${a.ids.map(id => escapeHtml(nameOf(id))).join(", ")} · ${escapeHtml(a.line)}</div></div>`;
 }
-function awardsHtml(f, view){
-  const list = f.awards || [];
-  if (view === "phone"){
-    const mine = list.filter(a => a.ids.includes(myId()));
-    return `<span class="kicker">The awards</span><h3>${f.awardsDone ? "The awards are over" : "Awards are being presented"}</h3>
-      <p class="muted" style="margin:0">Watch the community screen.</p>${mine.length && f.awardsDone ? `<div class="verdict role-faithful">You won: ${mine.map(a => escapeHtml(a.title)).join(", ")}</div>` : ""}`;
-  }
-  if (f.awardsDone){
-    return `<span class="kicker">The awards</span><h3>Tonight's honours</h3>
-      <div class="award-grid">${list.map(a => `<div class="award-mini"><b>${escapeHtml(a.title)}</b><span>${a.ids.map(id => escapeHtml(nameOf(id))).join(", ")}</span><span class="muted">${escapeHtml(a.line)}</span></div>`).join("")}</div>
-      ${view === "host" ? `<p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>` : ""}`;
-  }
-  const a = list[f.awardStep];
-  return `<span class="kicker">The awards · ${f.awardStep + 1} of ${list.length}</span>${awardCard(a, true)}`;
+function awardsBoardHtml(list, idxs){
+  return `<div class="award-grid">${idxs.map(i => list[i]).map(a => `<div class="award-mini"><b>${escapeHtml(a.title)}</b><span>${a.ids.map(id => escapeHtml(nameOf(id))).join(", ")}</span><span class="muted">${escapeHtml(a.line)}</span></div>`).join("")}</div>`;
 }
+function awardsHtml(f, view){
+  const list = f.awards || [], done = f.awardsRevealed || [];
+  if (view === "host"){
+    const rows = list.map((a, i) => {
+      const shown = done.includes(i), current = f.awardShown === i;
+      return `<div class="award-row ${current ? "current" : ""}"><div class="award-row-text"><b>${escapeHtml(a.title)}</b>
+        <span>${a.ids.map(id => escapeHtml(nameOf(id))).join(", ")} · ${escapeHtml(a.line)}</span></div>
+        <button class="btn small ${shown ? "" : "solid"}" type="button" data-award="${i}">${current ? "On screen" : shown ? "Show again" : "Reveal"}</button></div>`;
+    }).join("");
+    return `<span class="kicker">The awards · ${done.length} of ${list.length} revealed</span><h3>Present the awards</h3>
+      <p class="muted" style="margin:0">Only you can see this list. Reveal each award when you're ready.</p>
+      <div class="award-list">${rows}</div>
+      <div class="acts"><button class="btn small" type="button" data-fire="awards-board" ${done.length ? "" : "disabled"}>Show all revealed awards</button><button class="btn small" type="button" data-fire="chart">Game chart</button></div>
+      <p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>`;
+  }
+  if (view === "phone"){
+    const mine = done.map(i => list[i]).filter(a => a.ids.includes(myId()));
+    return `<span class="kicker">The awards</span><h3>Awards are being presented</h3>
+      <p class="muted" style="margin:0">Watch the community screen.</p>${mine.length ? `<div class="verdict role-faithful">You won: ${mine.map(a => escapeHtml(a.title)).join(", ")}</div>` : ""}`;
+  }
+  if (f.awardsBoard) return `<span class="kicker">The awards</span><h3>Tonight's honours</h3>${awardsBoardHtml(list, done)}`;
+  if (f.awardShown == null) return `<span class="kicker">The awards</span><h3 class="final-headline">And now, the awards</h3><p class="stage-lede">${list.length} honours to hand out tonight.</p>`;
+  return `<span class="kicker">The awards · ${done.length} of ${list.length}</span>${awardCard(list[f.awardShown], true)}`;
+}
+
+/* ---------- The game chart ---------- */
+// A running log in host/stats.events: every banishment vote, every elimination, every night.
+// After the game the host can open a chart laid out like the show's voting history table.
+let chartOpen = false;
+async function logEvent(e){
+  if (!(role === "host" || isTrial())) return;
+  try { await bumpStats(s => { s.events = (s.events || []).concat([{ ...e, at: Date.now() }]); }); } catch(_){}
+}
+
+function buildChart(){
+  const st = statsNow(), events = st.events || [], start = st.startRoles || {};
+  const f = fireState(), finalRoles = (f && f.allRoles) || {};
+  const cols = []; let cur = { votes: [], murders: [], night: null, banished: null };
+  const elim = {};   // id -> list of { col, kind, endCol }
+  const pushElim = (id, col, kind) => { (elim[id] = elim[id] || []).push({ col, kind, end: null }); };
+  events.forEach(e => {
+    const idx = cols.length;
+    if (e.type === "vote") cur.votes.push(e);
+    else if (e.type === "night") cur.night = e;
+    else if (e.type === "revive"){ const l = elim[e.id]; if (l && l.length && l[l.length - 1].end == null) l[l.length - 1].end = idx; cur.revived = (cur.revived || []).concat([e.id]); }
+    else if (e.type === "elim" && e.state === "murdered"){ cur.murders.push(e); pushElim(e.id, idx, "Murdered"); }
+    else if (e.type === "elim" && e.state === "banished"){
+      cur.banished = e; pushElim(e.id, idx + 1, "Banished");
+      cols.push(cur); cur = { votes: [], murders: [], night: null, banished: null };
+    }
+  });
+  if (cur.votes.length || cur.murders.length || cur.night || cur.revived) cols.push(cur);
+  return { cols, elim, start, finalRoles };
+}
+const roleOf = (data, id) => data.finalRoles[id] || roleMap()[id] || data.start[id] || "faithful";
+function tallyText(v){
+  const c = {};
+  Object.keys(v.votes || {}).forEach(k => { const t = v.votes[k]; if (t) c[t] = (c[t] || 0) + ((v.weights || {})[k] || 1); });
+  const n = Object.values(c).sort((a, b) => b - a);
+  return n.length ? n.join("–") : "—";
+}
+function chartHtml(){
+  const data = buildChart(), { cols, elim } = data;
+  if (!cols.length) return `<p class="muted" style="margin:0">Nothing has happened yet, so there's no chart to show.</p>`;
+  const S = allStatus();
+  const everyone = allPlayers().map(p => p.id).filter(id => roleMap()[id] || data.start[id] || data.finalRoles[id]);
+  // Order: still standing at the end first, then everyone else by how late they went out.
+  const lastOut = id => { const l = elim[id]; return l && l.length && l[l.length - 1].end == null ? l[l.length - 1].col : Infinity; };
+  const rows = everyone.slice().sort((a, b) => lastOut(b) - lastOut(a));
+  const nm = id => escapeHtml(nameOf(id));
+  const roleCls = id => roleOf(data, id) === "traitor" ? "ch-traitor" : "ch-faithful";
+
+  let h = `<div class="chart-wrap"><table class="game-chart"><thead>`;
+  h += `<tr><th class="ch-label">Round</th>${cols.map((c, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
+  // Traitors' decision
+  h += `<tr><th class="ch-label">Traitors' decision</th>${cols.map(c => {
+    const n = c.night, ms = c.murders.map(m => m.id);
+    if (n && n.kind === "recruit") return `<td class="ch-traitor">${nm(n.id)}<small>Recruited</small></td>`;
+    if (ms.length) return `<td class="${roleOf(data, ms[0]) === "traitor" ? "ch-traitor" : "ch-faithful"}">${ms.map(nm).join(", ")}<small>${n && n.mode === "plain" ? "Murder in plain sight" : n && n.mode === "chain" ? "Safety Chain murder" : "Murder"}</small></td>`;
+    if (n && n.kind === "shielded") return `<td class="ch-plain">None<small>Saved by a shield</small></td>`;
+    if (n) return `<td class="ch-plain">None<small>${n.mode === "plain" ? "Plain sight failed" : "No murder"}</small></td>`;
+    return `<td class="ch-plain">—</td>`;
+  }).join("")}</tr>`;
+  // Shield
+  h += `<tr><th class="ch-label">Shield</th>${cols.map(c => `<td class="ch-plain">${c.night && (c.night.shields || []).length ? c.night.shields.map(nm).join(", ") : c.night ? "None" : "—"}</td>`).join("")}</tr>`;
+  // Banishment
+  h += `<tr><th class="ch-label">Banishment</th>${cols.map(c => c.banished
+    ? `<td class="${(c.banished.role || roleOf(data, c.banished.id)) === "traitor" ? "ch-traitor" : "ch-faithful"}">${nm(c.banished.id)}${c.votes.some(v => v.endgame) ? "<small>Fire Pit</small>" : ""}</td>`
+    : `<td class="ch-plain">None</td>`).join("")}</tr>`;
+  // Vote tally
+  h += `<tr class="ch-sep"><th class="ch-label">Vote</th>${cols.map(c => {
+    if (!c.votes.length) return `<td class="ch-plain">—</td>`;
+    const first = c.votes[0], rest = c.votes.slice(1);
+    return `<td class="ch-plain">${tallyText(first)}${rest.map(r => `<small>Revote ${tallyText(r)}</small>`).join("")}</td>`;
+  }).join("")}</tr></thead><tbody>`;
+  // One row per player
+  rows.forEach(id => {
+    const startRole = data.start[id] || roleOf(data, id), endRole = roleOf(data, id);
+    const bar = startRole === endRole ? `ch-bar-${endRole}` : `ch-bar-${startRole} ch-bar-split`;
+    h += `<tr><th class="ch-name ${bar}">${nm(id)}</th>`;
+    const spans = (elim[id] || []).map(e => ({ ...e, end: e.end == null ? cols.length : e.end }));
+    for (let i = 0; i < cols.length; ){
+      const sp = spans.find(e => e.col === i && e.end > i);
+      if (sp){
+        const lastRound = sp.kind === "Banished" ? sp.col : sp.col + 1;
+        h += `<td colspan="${sp.end - i}" class="${sp.kind === "Murdered" ? "ch-murdered" : "ch-banished"}">${sp.kind}<small>Round ${lastRound}</small></td>`;
+        i = sp.end; continue;
+      }
+      const c = cols[i];
+      const cell = c.votes.map((v, k) => {
+        const t = (v.votes || {})[id]; if (!t && k === 0) return "—"; if (!t) return "";
+        const w = (v.weights || {})[id] === 2 ? " ×2" : "";
+        return k === 0 ? nm(t) + w : `<small>Revote: ${nm(t)}${w}</small>`;
+      }).join("");
+      h += `<td>${c.votes.length ? cell : ""}</td>`;
+      i++;
+    }
+    h += `</tr>`;
+  });
+  h += `</tbody></table></div>
+    <p class="muted" style="margin:0;font-size:.85rem">Blue is Faithful, red is Traitor. A split name bar means the player was recruited or revived into a new role. "×2" marks a Dagger vote.</p>`;
+  return h;
+}
+function renderChart(){
+  const st = $("chartStage");
+  const f = fireState();
+  const show = chartOpen && isHostView() && !!(f && f.phase === "finale" && f.winner);
+  st.hidden = !show;
+  if (!show) return;
+  st.innerHTML = `<div class="chart-head"><div><span class="kicker">After the game</span><h3>The game chart</h3></div><button class="btn small" type="button" data-chart="close">Close chart</button></div>${chartHtml()}`;
+}
+$("chartStage").addEventListener("click", e => { if (e.target.closest("[data-chart='close']")){ chartOpen = false; renderChart(); } });
 
 renderWall();
 boot();
