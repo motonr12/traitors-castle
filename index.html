@@ -682,6 +682,7 @@ function startSubs(){
   if (isOwner){
     db.doc("host/turret").onSnapshot(s => { hostTurret = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.doc("host/plan").onSnapshot(s => { murderPlan = s.exists ? s.data() : null; }, ()=>{});
+    db.doc("host/double").onSnapshot(s => { hostDouble = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.doc("host/mips").onSnapshot(s => { hostMips = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.collection("cpicks").onSnapshot(s => { cpicks = {}; s.docs.forEach(d => { if (d.exists) cpicks[d.id] = d.data(); }); }, ()=>{});
     db.collection("ghost").onSnapshot(s => { hostGhosts = {}; s.docs.forEach(d => { if (d.exists) hostGhosts[d.id] = d.data(); }); }, ()=>{});
@@ -775,6 +776,7 @@ async function clearNightData(){
   await db.doc("host/plan").delete().catch(()=>{});
   await db.doc("host/turret").delete().catch(()=>{});
   await db.doc("host/mips").delete().catch(()=>{});
+  await db.doc("host/double").delete().catch(()=>{});
   await db.doc("game/plain").delete().catch(()=>{});
   await db.doc("game/chain").delete().catch(()=>{});
   await Promise.all(Object.keys(cpicks).map(id => db.doc("cpicks/"+id).delete().catch(()=>{})));
@@ -841,7 +843,7 @@ function renderGameBar(){
   } else if (host){
     const tr = Object.values(roleMap()).filter(r => r === "traitor").length;
     bar.innerHTML = `<div class="lead"><span class="kicker">Game in progress</span><span class="big">${tr} Traitors walk among ${g.players || n}</span><span class="muted">Roles show under each portrait. Hide them before you put this screen where players can see it.</span></div>
-      <div class="acts">${voteBusy() || turretOrMurderBusy() || fireLive(fireState()) ? "" : `<button class="btn solid" data-act="vote" ${livingIds().length >= 3 ? "" : "disabled"}>Start vote</button><button class="btn danger" data-act="turret">Turret</button>${ghostModeOn() && !ghostMeta().voteUsed ? `<button class="btn small ghost-btn" data-act="ghost-vote" ${ghostIds().length && livingIds().length >= 3 ? "" : "disabled"}>Ghost vote</button>` : ""}<button class="btn small danger" data-act="special" aria-pressed="${specialOpen}">Special murders</button>${livingIds().length <= 5 ? `<button class="btn fire-btn" data-act="firepit">${livingIds().length <= 2 ? "Final reveal" : "Fire Pit"}</button>` : ""}`}<button class="btn small" data-act="announce">Announcement</button><button class="btn small" data-act="powers" aria-pressed="${powersOpen}">Powers</button><button class="btn small" data-act="toggle-roles" aria-pressed="${hideRoles}">${hideRoles ? "Show roles" : "Hide roles"}</button>${gbConfirm === "end"
+      <div class="acts">${voteBusy() || turretOrMurderBusy() || fireLive(fireState()) ? "" : `<button class="btn solid" data-act="vote" ${livingIds().length >= 3 ? "" : "disabled"}>Start vote</button>${doubleUsed() ? "" : `<button class="btn small danger" data-act="double" ${livingIds().length >= 4 ? "" : "disabled"}>Double banishment</button>`}<button class="btn danger" data-act="turret">Turret</button>${ghostModeOn() && !ghostMeta().voteUsed ? `<button class="btn small ghost-btn" data-act="ghost-vote" ${ghostIds().length && livingIds().length >= 3 ? "" : "disabled"}>Ghost vote</button>` : ""}<button class="btn small danger" data-act="special" aria-pressed="${specialOpen}">Special murders</button>${livingIds().length <= 5 ? `<button class="btn fire-btn" data-act="firepit">${livingIds().length <= 2 ? "Final reveal" : "Fire Pit"}</button>` : ""}`}<button class="btn small" data-act="announce">Announcement</button><button class="btn small" data-act="powers" aria-pressed="${powersOpen}">Powers</button><button class="btn small" data-act="toggle-roles" aria-pressed="${hideRoles}">${hideRoles ? "Show roles" : "Hide roles"}</button>${gbConfirm === "end"
         ? `<span>End the game and clear all roles?</span><button class="btn small danger" data-act="end-yes">Yes, end</button><button class="link" data-act="cancel">Cancel</button>`
         : `<button class="btn small danger" data-act="end">End game</button>`}</div>`;
   } else if (!g.started){
@@ -874,6 +876,7 @@ $("gameBar").addEventListener("click", e => {
   else if (a === "hide"){ revealed = false; renderWall(); }
   else if (a === "vote") startVote();
   else if (a === "turret") startTurret();
+  else if (a === "double") startDouble();
   else if (a === "announce"){ $("announceComposer").hidden = false; $("announceText").value = (announceState() || {}).active ? announceState().text : ""; $("announceText").focus(); }
   else if (a === "screen-toggle") setScreenSetting(!screenOn()).catch(()=> toast("That didn't save. Try again."));
   else if (a === "ghost-toggle") setGhostSetting(!ghostModeOn()).catch(()=> toast("That didn't save. Try again."));
@@ -1373,8 +1376,8 @@ async function startVote(opts){
   if (voters.length < (revote ? 2 : (opts && opts.endgame ? 2 : 3))){ toast("A vote needs at least 3 players still in the game"); return; }
   const now = Date.now();
   pickTarget = null; trialVotes = {}; trialDaggerVote = false; daggerOn = false; trialRevealReq = false;
-  const extra = { ...(revote ? { candidates: opts.candidates, isRevote: true } : {}), ...(opts && opts.endgame ? { endgame: true } : {}), ...(opts && opts.ghostVote ? { ghostVote: true } : {}) };
-  try { await putVote({ round: (currentVote()?.round || 0) + 1, phase:"open", startedAt: now, endsAt: now + VOTE_MS, voters, ...extra }); toast(revote ? "The revote is open" : "The vote is open"); }
+  const extra = { ...(revote ? { candidates: opts.candidates, isRevote: true } : {}), ...(opts && opts.endgame ? { endgame: true } : {}), ...(opts && opts.ghostVote ? { ghostVote: true } : {}), ...(opts && opts.double ? { double: true } : {}) };
+  try { await putVote({ round: (currentVote()?.round || 0) + 1, phase:"open", startedAt: now, endsAt: now + VOTE_MS, voters, ...extra }); toast(revote ? "The revote is open" : opts && opts.double ? "Double banishment: the vote is open" : "The vote is open"); }
   catch(_){ toast("The vote couldn't start. Try again."); }
 }
 function myVoteTarget(v){
@@ -1474,8 +1477,55 @@ async function showCurrent(v, locked){
   const revealed = v.revealed.concat([{ voter, target: locked[voter] || null, weight }]);
   await putVote({ ...v, revealed, shownAt: Date.now() });
 }
+// Double banishment: the top two vote-getters both leave. Ties are settled with a revote
+// (outside the Fire Pit, a second tie is settled by chance, as with ordinary banishments).
+// Once per game: using it is remembered in host/double (host only).
+let hostDouble = null;
+const doubleUsed = () => isTrial() ? !!trialGame.doubleUsed : !!(hostDouble && hostDouble.used);
+async function startDouble(){
+  if (doubleUsed() || voteBusy()) return;
+  if (livingIds().length < 4){ toast("A double banishment needs at least 4 players still in the game"); return; }
+  try {
+    if (isTrial()){ trialGame.doubleUsed = true; saveTrial(); }
+    else await db.doc("host/double").set({ used: true, at: Date.now() });
+    await startVote({ double: true });
+  } catch(_){ toast("The double banishment couldn't start. Try again."); }
+}
+function doubleOutcome(counts, v){
+  const ids = Object.keys(counts);
+  if (!ids.length) return { type:"none" };
+  const random = arr => arr[Math.floor(Math.random() * arr.length)];
+  const lastChance = v.isRevote && !v.endgame;
+  const max1 = Math.max(...ids.map(k => counts[k]));
+  const g1 = ids.filter(k => counts[k] === max1);
+  if (g1.length === 2) return { type:"double", ids: g1, votes: { [g1[0]]: max1, [g1[1]]: max1 } };
+  if (g1.length >= 3){
+    if (lastChance){ const a = random(g1), b = random(g1.filter(x => x !== a)); return { type:"double", ids: [a, b], votes: { [a]: max1, [b]: max1 }, random: true, safe: g1.filter(x => x !== a && x !== b) }; }
+    return { type:"tie", ids: g1, votes: max1, need: 2 };
+  }
+  const first = g1[0], rest = ids.filter(k => k !== first);
+  if (!rest.length) return { type:"banish", id: first, votes: max1, onlyOne: true };
+  const max2 = Math.max(...rest.map(k => counts[k]));
+  const g2 = rest.filter(k => counts[k] === max2);
+  if (g2.length === 1) return { type:"double", ids: [first, g2[0]], votes: { [first]: max1, [g2[0]]: max2 } };
+  if (lastChance){ const b = random(g2); return { type:"double", ids: [first, b], votes: { [first]: max1, [b]: max2 }, random: true, safe: g2.filter(x => x !== b) }; }
+  return { type:"tie", ids: g2, votes: max2, need: 1, banishedFirst: first, firstVotes: max1 };
+}
 async function finishVote(v){
   const counts = {}; v.revealed.forEach(r => { if (r.target) counts[r.target] = (counts[r.target] || 0) + (r.weight || 1); });
+  if (v.double){
+    const outcome = doubleOutcome(counts, v);
+    await putVote({ ...v, phase:"done", counts, outcome, doneAt: Date.now() });
+    await recordVoteStats(v, outcome).catch(()=>{});
+    const out = outcome.type === "double" ? outcome.ids : outcome.type === "banish" ? [outcome.id] : outcome.banishedFirst ? [outcome.banishedFirst] : [];
+    for (const id of out) await setStatus(id, "banished", { hideRole:true });
+    if (!outcome.random){
+      const L = isTrial() ? trialGame.locked : (lockedVotes && lockedVotes.round === v.round ? lockedVotes : liveVotes["_locked"]);
+      if (L && L.round === v.round) for (const id of out) await scoreBets(L.ghostBets, id, "Banishment");
+    }
+    await tickDaggers(v);
+    return;
+  }
   const max = Math.max(0, ...Object.values(counts));
   const leaders = Object.keys(counts).filter(k => counts[k] === max);
   let outcome = !max ? { type:"none" } : leaders.length === 1 ? { type:"banish", id: leaders[0], votes: max } : { type:"tie", ids: leaders, votes: max };
@@ -1557,9 +1607,33 @@ function talliesHtml(revealed){
   const rows = Object.entries(counts).sort((a,b) => b[1]-a[1]);
   return rows.length ? `<div class="tallies">${rows.map(([id, c]) => `<span>${escapeHtml(nameOf(id))} · ${c}</span>`).join("")}</div>` : "";
 }
+function roleLine(v, id, showRole){
+  const name = escapeHtml(nameOf(id)), r = revealedRole(id);
+  if (v.endgame) return r ? `<div class="verdict role-${r}">${name} was… ${r === "traitor" ? "a Traitor" : "Faithful"}.</div>` : `<p class="muted" style="margin:0">This is the endgame. ${name}'s role stays secret until the very end.</p>`;
+  if (!showRole) return "";
+  return r ? `<div class="verdict role-${r}">${name} was… ${r === "traitor" ? "a Traitor" : "Faithful"}.</div>` : `<p class="muted" style="margin:0">${name}, before you leave the castle, the host will reveal your role.</p>`;
+}
 function verdictHtml(v, showRole){
   const o = v.outcome;
   if (o.type === "none") return `<div class="verdict">No votes were cast. Nobody is banished.</div>`;
+  const vs = n => `${n} vote${n === 1 ? "" : "s"}`;
+  if (o.type === "double"){
+    const [a, b] = o.ids;
+    let h = o.random
+      ? `<div class="verdict">Another tie. ${(o.safe || []).map(id => escapeHtml(nameOf(id))).join(" and ")} ${(o.safe || []).length > 1 ? "are" : "is"} safe. Fate has made the choice.</div>`
+      : "";
+    h += `<div class="verdict">Double banishment. ${escapeHtml(nameOf(a))} (${vs(o.votes[a])}) and ${escapeHtml(nameOf(b))} (${vs(o.votes[b])}) must both leave the castle.</div>`;
+    return h + roleLine(v, a, showRole) + roleLine(v, b, showRole);
+  }
+  if (o.type === "tie" && o.banishedFirst && !o.decided){
+    return `<div class="verdict">With ${vs(o.firstVotes)}, ${escapeHtml(nameOf(o.banishedFirst))} is the first to be banished.</div>${roleLine(v, o.banishedFirst, showRole)}
+      <div class="verdict">For the second banishment, it's a tie between ${o.ids.map(id => escapeHtml(nameOf(id))).join(" and ")}.</div>
+      <p class="muted" style="margin:0">${v.endgame ? "They face a revote until someone is chosen." : "The host may call a revote between them."}</p>`;
+  }
+  if (o.type === "tie" && o.need === 2 && !o.decided){
+    return `<div class="verdict">A ${o.ids.length}-way tie between ${o.ids.map(id => escapeHtml(nameOf(id))).join(", ")}, with ${vs(o.votes)} each.</div>
+      <p class="muted" style="margin:0">Two of them must go. The host may call a revote between them.</p>`;
+  }
   if (o.type === "tie" && !o.decided){
     const names = o.ids.map(id => escapeHtml(nameOf(id))).join(" and ");
     return `<div class="verdict">It's a tie between ${names}${o.votes ? `, with ${o.votes} vote${o.votes > 1 ? "s" : ""} each` : ""}.</div><p class="muted" style="margin:0">${v.endgame ? "In the Fire Pit there is no luck of the draw. They face a revote until someone is chosen." : "The host may call a revote between them."}</p>`;
@@ -1590,7 +1664,7 @@ function renderVote(force){
   if (wasHidden) applyScreenLayout();
   const now = Date.now();
   const myId_ = myId();
-  const kick = `<span class="kicker">Round Table · Vote ${v.round}</span>`;
+  const kick = `<span class="kicker">Round Table · Vote ${v.round}${v.double ? " · Double banishment" : ""}</span>`;
   if (v.round !== pickRound){ pickRound = v.round; pickTarget = null; daggerOn = false; }
 
   /* ----- voting ----- */
@@ -1606,7 +1680,7 @@ function renderVote(force){
       if (left <= 0){
         body = `<p class="muted" style="margin:0">Time's up. ${screen ? "Get ready to reveal your votes." : player && !host ? (screenOn() ? "Watch the community screen. The votes will be revealed one at a time." : "The votes will be revealed here, one at a time.") : "Locking in the votes…"}</p>`;
       } else if (screen){
-        body = `<p class="stage-lede">${v.isRevote ? `Revote: choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}. ${v.endgame ? "If it ties again, you'll vote again." : "If it ties again, both are safe and fate picks someone else."}` : "Players, cast your vote on your phone. Who do you believe is a Traitor?"}</p>`;
+        body = `<p class="stage-lede">${v.isRevote ? `Revote: choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}. ${v.endgame ? "If it ties again, you'll vote again." : "If it ties again, both are safe and fate picks someone else."}` : (v.double ? "Double banishment. Tonight the two players with the most votes will both leave the castle. Cast your vote on your phone." : "Players, cast your vote on your phone. Who do you believe is a Traitor?")}</p>`;
       } else if (host){
         body = `<p style="margin:0">${votesIn(v)} of ${v.voters.length} votes are in.</p>
           <div class="acts"><button class="btn small" type="button" data-vote="close">Close voting now</button></div>`;
@@ -1616,7 +1690,7 @@ function renderVote(force){
           : "You're no longer in the game, so you can watch but not vote."}</p>`;
       } else {
         const sel = pickTarget || mine;
-        body = `<p style="margin:0">${mine ? `Your vote for <b>${escapeHtml(nameOf(mine))}</b>${mineDagger ? " (with the Dagger)" : ""} is in. You can change it until time runs out.` : (v.isRevote ? `It's a revote. Choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}.` : "Who do you think is a Traitor? Choose one player.")}</p>
+        body = `<p style="margin:0">${mine ? `Your vote for <b>${escapeHtml(nameOf(mine))}</b>${mineDagger ? " (with the Dagger)" : ""} is in. You can change it until time runs out.` : (v.isRevote ? `It's a revote. Choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}.` : (v.double ? "Double banishment: the two players with the most votes will both be banished. Choose one player." : "Who do you think is a Traitor? Choose one player."))}</p>
           <div class="choices">${(v.candidates || v.voters).filter(id => id !== myId_).map(id =>
             `<button class="choice" type="button" data-pick="${escapeHtml(id)}" aria-pressed="${sel === id}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}</span></button>`).join("")}</div>
           ${daggerAvail ? `<div class="dagger-box"><button class="btn small ${daggerOn ? "solid" : ""}" type="button" data-vote="dagger" aria-pressed="${daggerOn}">${daggerOn ? "Dagger drawn: your vote counts twice" : "Use the Dagger on this vote"}</button><span class="muted">You can only use it once. Everyone will see it at the reveal.</span></div>` : ""}
@@ -1698,17 +1772,19 @@ function renderVote(force){
 
   /* ----- verdict ----- */
   const roleTime = true;
-  const roleKnown = v.outcome.type === "banish" ? !!revealedRole(v.outcome.id) : false;
+  const roleKnown = v.outcome.type === "banish" ? !!revealedRole(v.outcome.id) : v.outcome.type === "double" ? v.outcome.ids.map(id => revealedRole(id) || "").join(",") : v.outcome.banishedFirst ? !!revealedRole(v.outcome.banishedFirst) : false;
   const key = ["done", v.round, roleTime, roleKnown, JSON.stringify(v.outcome), host, screen, player].join("|");
   if (key === stageKey && !force) return;
   stageKey = key;
-  const banishedPortrait = v.outcome.type === "banish" && (screen || host || noScreen()) ? bigPortrait(v.outcome.id, "verdict-portrait") : "";
+  const outIds = v.outcome.type === "banish" ? [v.outcome.id] : v.outcome.type === "double" ? v.outcome.ids : v.outcome.banishedFirst ? [v.outcome.banishedFirst] : [];
+  const banishedPortrait = outIds.length && (screen || host || noScreen())
+    ? (outIds.length > 1 ? `<div class="fire-row">${outIds.map(id => bigPortrait(id, "verdict-portrait")).join("")}</div>` : bigPortrait(outIds[0], "verdict-portrait")) : "";
   let hostActs = "";
   if (host){
     const tieBtns = v.outcome.type === "tie" && !v.outcome.decided
       ? `<button class="btn solid" type="button" data-vote="revote">Revote between ${v.outcome.ids.map(id => escapeHtml(nameOf(id))).join(" and ")}</button>` : "";
-    const revealBtn = v.outcome.type === "banish" && !roleKnown && !v.endgame
-      ? `<button class="btn solid" type="button" data-reveal-role="${escapeHtml(v.outcome.id)}">Reveal ${escapeHtml(nameOf(v.outcome.id))}'s role</button>` : "";
+    const revealBtn = v.endgame ? "" : outIds.filter(id => !revealedRole(id)).map(id =>
+      `<button class="btn solid" type="button" data-reveal-role="${escapeHtml(id)}">Reveal ${escapeHtml(nameOf(id))}'s role</button>`).join("");
     hostActs = `<div class="acts">${tieBtns}${revealBtn}<button class="btn small" type="button" data-vote="dismiss">Close the vote</button></div>`;
   }
   stage.innerHTML = `${kick}<h3>The castle has spoken</h3>${banishedPortrait}${verdictHtml(v, roleTime)}${talliesHtml(v.revealed || [])}${hostActs}`;
@@ -1726,7 +1802,7 @@ $("voteStage").addEventListener("click", e => {
   if (a === "submit" && (pickTarget || myVoteTarget(v))) submitVote(pickTarget || myVoteTarget(v));
   else if (a === "reveal") requestReveal();
   else if (a === "ghost-reveal") revealGhostVote();
-  else if (a === "revote" && v.outcome && v.outcome.type === "tie") startVote({ candidates: v.outcome.ids, endgame: !!v.endgame });
+  else if (a === "revote" && v.outcome && v.outcome.type === "tie") startVote({ candidates: v.outcome.ids, endgame: !!v.endgame, double: v.outcome.need === 2 });
   else if (a === "force") forceReveal();
   else if (a === "close") putVote({ ...v, endsAt: Date.now() - GRACE_MS }).catch(()=> toast("Voting couldn't be closed. Try again."));
   else if (a === "dismiss") putVote({ ...v, phase:"closed" }).catch(()=> toast("The vote couldn't be closed. Try again."));
@@ -3299,7 +3375,8 @@ async function recordVoteStats(v, outcome){
       if (R[r.target] === "traitor") add(s.traitorVotes, r.voter);
     });
     // A revote candidate who isn't banished at the end of it has survived a close call.
-    if (v.isRevote && outcome && outcome.type === "banish") (v.candidates || []).forEach(id => { if (id !== outcome.id) add(s.closeCalls, id); });
+    const gone = outcome ? (outcome.type === "banish" ? [outcome.id] : outcome.type === "double" ? outcome.ids : []) : [];
+    if (v.isRevote && gone.length) (v.candidates || []).forEach(id => { if (!gone.includes(id)) add(s.closeCalls, id); });
   });
 }
 async function recordShortlist(ids){ await bumpStats(s => { ids.forEach(id => add(s.shortlisted, id)); }); }
@@ -3426,8 +3503,10 @@ function buildChart(){
     else if (e.type === "revive"){ const l = elim[e.id]; if (l && l.length && l[l.length - 1].end == null) l[l.length - 1].end = idx; cur.revived = (cur.revived || []).concat([e.id]); }
     else if (e.type === "elim" && e.state === "murdered"){ cur.murders.push(e); pushElim(e.id, idx, "Murdered"); }
     else if (e.type === "elim" && e.state === "banished"){
-      cur.banished = e; pushElim(e.id, idx + 1, "Banished");
-      cols.push(cur); cur = { votes: [], murders: [], night: null, banished: null };
+      cur.banishedList = (cur.banishedList || []).concat([e]); cur.banished = cur.banishedList[0]; pushElim(e.id, idx + 1, "Banished");
+      const lastVote = cur.votes[cur.votes.length - 1], o = lastVote && lastVote.outcome;
+      const expect = o && (o.type === "double" || (o.type === "tie" && o.banishedFirst)) ? 2 : 1;
+      if (cur.banishedList.length >= expect){ cols.push(cur); cur = { votes: [], murders: [], night: null, banished: null }; }
     }
   });
   if (cur.votes.length || cur.murders.length || cur.night || cur.revived) cols.push(cur);
@@ -3464,9 +3543,12 @@ function chartModel(){
     return { text: "—", cls: "plain" };
   }) });
   rows.push({ label: "Shield", head: true, cells: cols.map(c => ({ text: c.night && (c.night.shields || []).length ? c.night.shields.map(nameTxt).join(", ") : c.night ? "None" : "—", cls: "plain" })) });
-  rows.push({ label: "Banishment", head: true, cells: cols.map(c => c.banished
-    ? { text: nameTxt(c.banished.id), sub: c.votes.some(v => v.endgame) ? ["Fire Pit"] : [], cls: (c.banished.role || roleOf(data, c.banished.id)) === "traitor" ? "traitor" : "faithful" }
-    : { text: "None", cls: "plain" }) });
+  rows.push({ label: "Banishment", head: true, cells: cols.map(c => {
+    if (!c.banished) return { text: "None", cls: "plain" };
+    const list = c.banishedList || [c.banished], rl = list.map(e => (e.role || roleOf(data, e.id)) === "traitor" ? "traitor" : "faithful");
+    const subs = (list.length > 1 ? ["Double banishment"] : []).concat(c.votes.some(v => v.endgame) ? ["Fire Pit"] : []);
+    return { text: list.map(e => nameTxt(e.id)).join(" & "), sub: subs, cls: rl.every(r => r === rl[0]) ? rl[0] : "plain" };
+  }) });
   rows.push({ label: "Vote", head: true, sep: true, cells: cols.map(c => c.votes.length
     ? { text: tallyText(c.votes[0]), sub: c.votes.slice(1).map(r => "Revote " + tallyText(r)), cls: "plain" }
     : { text: "—", cls: "plain" }) });
