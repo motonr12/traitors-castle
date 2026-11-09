@@ -682,6 +682,7 @@ function startSubs(){
   if (isOwner){
     db.doc("host/turret").onSnapshot(s => { hostTurret = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.doc("host/plan").onSnapshot(s => { murderPlan = s.exists ? s.data() : null; }, ()=>{});
+    db.doc("host/fate").onSnapshot(s => { hostFate = s.exists ? s.data() : null; renderVote(true); }, ()=>{});
     db.doc("host/double").onSnapshot(s => { hostDouble = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.doc("host/mips").onSnapshot(s => { hostMips = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.collection("cpicks").onSnapshot(s => { cpicks = {}; s.docs.forEach(d => { if (d.exists) cpicks[d.id] = d.data(); }); }, ()=>{});
@@ -777,6 +778,7 @@ async function clearNightData(){
   await db.doc("host/turret").delete().catch(()=>{});
   await db.doc("host/mips").delete().catch(()=>{});
   await db.doc("host/double").delete().catch(()=>{});
+  await db.doc("host/fate").delete().catch(()=>{});
   await db.doc("game/plain").delete().catch(()=>{});
   await db.doc("game/chain").delete().catch(()=>{});
   await Promise.all(Object.keys(cpicks).map(id => db.doc("cpicks/"+id).delete().catch(()=>{})));
@@ -1453,7 +1455,7 @@ async function closeVote(v){
   const extra = Math.min(DAGGER_EXTRA_MS, 3000);
   const slot = Math.max(2500, Math.min(7500, (REVEAL_TOTAL_MS - daggers * extra - order.length * 250) / Math.max(1, order.length)));
   const callMs = Math.max(900, Math.round(slot * 0.35)), showMs = Math.round(slot - callMs);
-  await putVote({ ...v, phase:"reveal", order, step: 0, promptAt: Date.now(), shownAt: null, revealed: [], callMs, showMs, daggerMs: extra });
+  await putVote({ ...v, phase:"reveal", order, step: 0, promptAt: Date.now(), shownAt: null, revealed: [], callMs, showMs, daggerMs: extra, daggerCall: daggerCallFor(v, order[0]) });
 }
 // The reveal runs on its own: each voter's name is called, and after a short pause their vote appears.
 const CALL_MS = 2500, REVEAL_TOTAL_MS = 60000, GHOST_SUSPENSE_MS = 3500, GHOST_HOLD_MS = 9000;
@@ -1461,8 +1463,18 @@ async function revealGhostVote(){
   const v = currentVote(); if (!v || v.phase !== "reveal" || v.order[v.step] !== GHOSTS_ID || v.ghostGo) return;
   try { await putVote({ ...v, ghostGo: Date.now() }); } catch(_){ toast("That didn't save. Try again."); }
 }
+// A Dagger vote is announced first, then waits for its owner to press Reveal.
+function daggerCallFor(v, voter){
+  const L = getLocked(v) || {}, D = getLockedDaggers(v) || {};
+  return voter && voter !== GHOSTS_ID && L[voter] && D[voter] ? voter : null;
+}
 function voterPressedReveal(v, voter){
   if (voter === GHOSTS_ID) return !!v.ghostGo && Date.now() >= v.ghostGo + GHOST_SUSPENSE_MS; // the host reveals the ghosts
+  if (v.daggerCall === voter){
+    if (isTrial()) return trialRevealReq;
+    const lv = liveVotes[voter];
+    return !!(lv && lv.round === v.round && lv.revealed);
+  }
   return Date.now() >= v.promptAt + (v.callMs || CALL_MS);
 }
 function getLockedDaggers(v){
@@ -1491,6 +1503,44 @@ async function startDouble(){
     await startVote({ double: true });
   } catch(_){ toast("The double banishment couldn't start. Try again."); }
 }
+/* ----- deadlock: unanimous decision, or fate (which only the host sees first) ----- */
+let deadlockSel = [], hostFate = null;
+const fateState = () => isTrial() ? (trialGame.fate || null) : hostFate;
+async function finishDeadlock(v, chosen, how){
+  const o = v.outcome, ids = (o.banishedFirst ? [o.banishedFirst] : []).concat(chosen);
+  const out = ids.length > 1 ? { type:"double", ids, votes: Object.fromEntries(ids.map(id => [id, id === o.banishedFirst ? o.firstVotes : o.votes])) }
+                             : { type:"banish", id: ids[0], votes: o.votes };
+  const result = { ...out, [how]: true, safe: o.ids.filter(id => !chosen.includes(id)), wasDeadlock: true };
+  await putVote({ ...v, outcome: result });
+  for (const id of chosen) await setStatus(id, "banished", { hideRole:true });
+  await bumpStats(s => { if (how === "unanimous") result.safe.forEach(id => add(s.closeCalls, id)); else o.ids.forEach(id => add(s.closeCalls, id)); }).catch(()=>{});
+  if (how === "unanimous"){
+    const L = isTrial() ? trialGame.locked : (lockedVotes && lockedVotes.round === v.round ? lockedVotes : liveVotes["_locked"]);
+    if (L && L.round === v.round) for (const id of chosen) await scoreBets(L.ghostBets, id, "Banishment");
+  }
+}
+async function unanimousDecision(){
+  const v = currentVote(), o = v && v.outcome; if (!o || o.type !== "deadlock") return;
+  if (deadlockSel.length !== o.need){ toast(o.need === 2 ? "Choose the two players they agreed on" : "Choose the player they agreed on"); return; }
+  try { await finishDeadlock(v, deadlockSel.slice(), "unanimous"); deadlockSel = []; } catch(_){ toast("That didn't save. Try again."); }
+}
+async function notUnanimous(){
+  const v = currentVote(), o = v && v.outcome; if (!o || o.type !== "deadlock" || o.fatePending) return;
+  // The tied players are safe; fate picks from everyone else still in the game.
+  const pool = livingIds().filter(id => !o.ids.includes(id));
+  const from = pool.length >= o.need ? pool : livingIds();
+  const picks = shuffle(from.slice()).slice(0, o.need);
+  try {
+    if (isTrial()){ trialGame.fate = { round: v.round, picks }; saveTrial(); }
+    else { await db.doc("host/fate").set({ round: v.round, picks }); hostFate = { round: v.round, picks }; }
+    await putVote({ ...v, outcome: { ...o, fatePending: true } });
+  } catch(_){ toast("That didn't save. Try again."); }
+}
+async function revealFate(){
+  const v = currentVote(), o = v && v.outcome, f = fateState();
+  if (!o || o.type !== "deadlock" || !o.fatePending || !f || f.round !== v.round) return;
+  try { await finishDeadlock(v, f.picks, "random"); } catch(_){ toast("That didn't save. Try again."); }
+}
 function doubleOutcome(counts, v){
   const ids = Object.keys(counts);
   if (!ids.length) return { type:"none" };
@@ -1500,7 +1550,7 @@ function doubleOutcome(counts, v){
   const g1 = ids.filter(k => counts[k] === max1);
   if (g1.length === 2) return { type:"double", ids: g1, votes: { [g1[0]]: max1, [g1[1]]: max1 } };
   if (g1.length >= 3){
-    if (lastChance){ const a = random(g1), b = random(g1.filter(x => x !== a)); return { type:"double", ids: [a, b], votes: { [a]: max1, [b]: max1 }, random: true, safe: g1.filter(x => x !== a && x !== b) }; }
+    if (lastChance) return { type:"deadlock", ids: g1, need: 2, votes: max1, double: true };
     return { type:"tie", ids: g1, votes: max1, need: 2 };
   }
   const first = g1[0], rest = ids.filter(k => k !== first);
@@ -1508,7 +1558,7 @@ function doubleOutcome(counts, v){
   const max2 = Math.max(...rest.map(k => counts[k]));
   const g2 = rest.filter(k => counts[k] === max2);
   if (g2.length === 1) return { type:"double", ids: [first, g2[0]], votes: { [first]: max1, [g2[0]]: max2 } };
-  if (lastChance){ const b = random(g2); return { type:"double", ids: [first, b], votes: { [first]: max1, [b]: max2 }, random: true, safe: g2.filter(x => x !== b) }; }
+  if (lastChance) return { type:"deadlock", ids: g2, need: 1, votes: max2, banishedFirst: first, firstVotes: max1, double: true };
   return { type:"tie", ids: g2, votes: max2, need: 1, banishedFirst: first, firstVotes: max1 };
 }
 async function finishVote(v){
@@ -1518,6 +1568,7 @@ async function finishVote(v){
     await putVote({ ...v, phase:"done", counts, outcome, doneAt: Date.now() });
     await recordVoteStats(v, outcome).catch(()=>{});
     const out = outcome.type === "double" ? outcome.ids : outcome.type === "banish" ? [outcome.id] : outcome.banishedFirst ? [outcome.banishedFirst] : [];
+    // (a deadlock's remaining places are settled by the host afterwards)
     for (const id of out) await setStatus(id, "banished", { hideRole:true });
     if (!outcome.random){
       const L = isTrial() ? trialGame.locked : (lockedVotes && lockedVotes.round === v.round ? lockedVotes : liveVotes["_locked"]);
@@ -1531,11 +1582,8 @@ async function finishVote(v){
   let outcome = !max ? { type:"none" } : leaders.length === 1 ? { type:"banish", id: leaders[0], votes: max } : { type:"tie", ids: leaders, votes: max };
   if (v.endgame && v.isRevote && outcome.type === "none") outcome = { type:"tie", ids: v.candidates || [], votes: 0 };
   if (v.isRevote && !v.endgame && outcome.type !== "banish"){
-    // A second tie: the tied players are safe and fate picks someone else.
-    const safe = outcome.type === "tie" ? leaders : (v.candidates || []);
-    const pool = v.voters.filter(id => !safe.includes(id));
-    const from = pool.length ? pool : v.voters;
-    outcome = { type:"banish", id: from[Math.floor(Math.random() * from.length)], votes: 0, random: true, safe };
+    // A second tie: the players must agree in person, unanimously, who leaves.
+    outcome = { type:"deadlock", ids: outcome.type === "tie" ? leaders : (v.candidates || []), need: 1, votes: max };
   }
   await putVote({ ...v, phase:"done", counts, outcome, doneAt: Date.now() });
   await recordVoteStats(v, outcome).catch(()=>{});
@@ -1577,7 +1625,7 @@ async function hostAutomation(){
         trialRevealReq = false;
         const step = v.step + 1;
         if (step >= v.order.length) await finishVote({ ...v, step });
-        else await putVote({ ...v, step, promptAt: now, shownAt: null });
+        else await putVote({ ...v, step, promptAt: now, shownAt: null, daggerCall: daggerCallFor(v, v.order[step]) });
       }
     }
   } catch(_){ /* retried on the next tick */ }
@@ -1616,6 +1664,18 @@ function roleLine(v, id, showRole){
 function verdictHtml(v, showRole){
   const o = v.outcome;
   if (o.type === "none") return `<div class="verdict">No votes were cast. Nobody is banished.</div>`;
+  if (o.type === "deadlock"){
+    const names = o.ids.map(id => escapeHtml(nameOf(id))).join(o.ids.length > 2 ? ", " : " and ");
+    const first = o.banishedFirst ? `<div class="verdict">${escapeHtml(nameOf(o.banishedFirst))} is the first to be banished.</div>${roleLine(v, o.banishedFirst, showRole)}` : "";
+    if (o.fatePending) return first + `<div class="verdict">There was no unanimous decision. ${names} ${o.ids.length > 1 ? "are" : "is"} safe.</div>
+      <div class="verdict role-traitor">Fate will now choose ${o.need === 2 ? "two players" : "a player"} to banish instead…</div>`;
+    return first + `<div class="verdict">Another tie between ${names}.</div>
+      <p style="margin:0;max-width:52ch;margin-inline:auto">Talk it over. The castle must agree <b>unanimously</b> on ${o.need === 2 ? "which two will leave" : "who will leave"}. If you can't all agree, ${o.ids.length > 1 ? "they are all" : "they are"} safe, and fate will choose someone else.</p>`;
+  }
+  if (o.wasDeadlock && o.type === "double"){
+    const lead = o.unanimous ? `By unanimous decision, the castle has chosen.` : `No unanimous decision. ${o.safe.map(id => escapeHtml(nameOf(id))).join(" and ")} ${o.safe.length > 1 ? "are" : "is"} safe, and fate has chosen instead.`;
+    return `<div class="verdict">${lead}</div><div class="verdict">${o.ids.map(id => escapeHtml(nameOf(id))).join(" and ")} must both leave the castle.</div>` + o.ids.map(id => roleLine(v, id, showRole)).join("");
+  }
   const vs = n => `${n} vote${n === 1 ? "" : "s"}`;
   if (o.type === "double"){
     const [a, b] = o.ids;
@@ -1637,6 +1697,12 @@ function verdictHtml(v, showRole){
   if (o.type === "tie" && !o.decided){
     const names = o.ids.map(id => escapeHtml(nameOf(id))).join(" and ");
     return `<div class="verdict">It's a tie between ${names}${o.votes ? `, with ${o.votes} vote${o.votes > 1 ? "s" : ""} each` : ""}.</div><p class="muted" style="margin:0">${v.endgame ? "In the Fire Pit there is no luck of the draw. They face a revote until someone is chosen." : "The host may call a revote between them."}</p>`;
+  }
+  if (o.wasDeadlock){
+    const nm = escapeHtml(nameOf(o.id));
+    const lead = o.unanimous ? `By unanimous decision, ${nm} is banished.`
+      : `No unanimous decision. ${o.safe.map(id => escapeHtml(nameOf(id))).join(" and ")} ${o.safe.length > 1 ? "are" : "is"} safe. Fate has chosen ${nm} to be banished instead.`;
+    return `<div class="verdict">${lead}</div>` + roleLine(v, o.id, showRole);
   }
   const name = escapeHtml(nameOf(o.id));
   let html = o.random
@@ -1714,18 +1780,23 @@ function renderVote(force){
     const meDone = player && v.revealed.some(r => r.voter === myId_);
     const waitingTap = isTrial() ? trialRevealReq : !!(myLiveVote && myLiveVote.round === v.round && myLiveVote.revealed);
     const ghostStage = voter === GHOSTS_ID ? (shown ? "shown" : v.ghostGo ? "rising" : "waiting") : "";
-    const key = ["rev", v.round, step, shown, isMe, meDone, myVoteSaving, waitingTap, host, screen, player, ghostStage].join("|");
+    const daggerTurn = !shown && v.daggerCall === voter;
+    const key = ["rev", v.round, step, shown, isMe, meDone, myVoteSaving, waitingTap, host, screen, player, ghostStage, daggerTurn].join("|");
     if (key === stageKey && !force) return;
     stageKey = key;
     const progress = `<p class="muted step-count">Vote ${step + 1} of ${total}</p>`;
 
     if (player && !host && !screen && screenOn()){
-      if (isMe && !shown){
+      if (isMe && daggerTurn){
+        stage.innerHTML = `${kick}<span class="kicker" style="color:#dcc6ef">The Dagger</span><h3>Everyone now knows you drew the Dagger</h3>
+          <p class="muted" style="margin:0">Your vote counts twice. When you're ready, reveal it to the castle.</p>
+          <div class="acts"><button class="btn solid big-btn" type="button" data-vote="reveal" ${waitingTap || myVoteSaving ? "disabled" : ""}>${waitingTap ? "Revealing…" : "Reveal my vote"}</button></div>`;
+      } else if (isMe && !shown){
         stage.innerHTML = `${kick}<h3>Your vote is next</h3><p class="muted" style="margin:0">Everyone is about to see who you voted for on the community screen.</p>`;
       } else if (isMe && shown){
         stage.innerHTML = `${kick}<h3>Your vote is on the screen</h3><p class="muted" style="margin:0">You voted for ${cur.target ? `<b>${escapeHtml(nameOf(cur.target))}</b>` : "nobody"}.</p>`;
       } else {
-        stage.innerHTML = `${kick}<h3>Eyes on the community screen</h3><p class="muted" style="margin:0">${voter === GHOSTS_ID ? (shown ? "The ghosts have spoken." : "The dead are about to speak.") : `${escapeHtml(nameOf(voter))} is ${shown ? "revealing" : "about to reveal"} their vote.`}${meDone ? " Your vote has been revealed." : ""}</p>`;
+        stage.innerHTML = `${kick}<h3>Eyes on the community screen</h3><p class="muted" style="margin:0">${voter === GHOSTS_ID ? (shown ? "The ghosts have spoken." : "The dead are about to speak.") : daggerTurn ? `${escapeHtml(nameOf(voter))} has activated the Dagger and is about to reveal their vote.` : `${escapeHtml(nameOf(voter))} is ${shown ? "revealing" : "about to reveal"} their vote.`}${meDone ? " Your vote has been revealed." : ""}</p>`;
       }
       return;
     }
@@ -1749,7 +1820,14 @@ function renderVote(force){
       return;
     }
     let main;
-    if (!shown){
+    if (daggerTurn){
+      const nm = escapeHtml(nameOf(voter));
+      main = `<div class="reveal-row">${bigPortrait(voter)}<div class="reveal-text">
+          <div class="reveal-sub dagger-call">${nm} has a secret power: <b>the Dagger</b>.</div>
+          <div class="reveal-target dagger-note">${nm} has chosen to activate it. Their vote counts twice.</div>
+          <div class="reveal-sub muted" style="font-size:clamp(.9rem,2.2vh,1.15rem)">${waitingTap && (isMe || isTrial()) ? "Revealing…" : `Waiting for ${nm} to reveal their vote…`}</div>
+        </div></div>`;
+    } else if (!shown){
       main = `<div class="reveal-row">${bigPortrait(voter)}<div class="reveal-text">
           <div class="reveal-sub">${voter === GHOSTS_ID ? "The ghosts have voted for…" : `${escapeHtml(nameOf(voter))} has voted for…`}</div>
         </div></div>`;
@@ -1762,9 +1840,11 @@ function renderVote(force){
     } else {
       main = `<div class="reveal-row">${bigPortrait(voter)}<div class="reveal-text"><div class="reveal-sub">${escapeHtml(nameOf(voter))} did not vote.</div></div></div>`;
     }
-    const hostActs = "";
-    // No community screen: the player whose turn it is gets their button right under the reveal.
-    const myActs = "";
+    // The Dagger holder presses their own Reveal. The host can step in if their phone gives up;
+    // in a trial, whoever is testing presses it for them.
+    const hostActs = daggerTurn && host && !isTrial() ? `<div class="acts"><button class="btn small" type="button" data-vote="force">Reveal it for them</button></div>` : "";
+    const myActs = daggerTurn && (isMe || isTrial()) && !waitingTap
+      ? `<div class="acts"><button class="btn solid big-btn" type="button" data-vote="reveal">${isMe ? "Reveal my vote" : `Reveal ${escapeHtml(nameOf(voter))}'s vote`}</button></div>` : "";
     stage.innerHTML = `${kick}${progress}${main}${myActs}${talliesHtml(v.revealed)}${hostActs}`;
     fitNames(stage);
     return;
@@ -1773,7 +1853,7 @@ function renderVote(force){
   /* ----- verdict ----- */
   const roleTime = true;
   const roleKnown = v.outcome.type === "banish" ? !!revealedRole(v.outcome.id) : v.outcome.type === "double" ? v.outcome.ids.map(id => revealedRole(id) || "").join(",") : v.outcome.banishedFirst ? !!revealedRole(v.outcome.banishedFirst) : false;
-  const key = ["done", v.round, roleTime, roleKnown, JSON.stringify(v.outcome), host, screen, player].join("|");
+  const key = ["done", v.round, roleTime, roleKnown, JSON.stringify(v.outcome), host, screen, player, deadlockSel.join(","), JSON.stringify(fateState())].join("|");
   if (key === stageKey && !force) return;
   stageKey = key;
   const outIds = v.outcome.type === "banish" ? [v.outcome.id] : v.outcome.type === "double" ? v.outcome.ids : v.outcome.banishedFirst ? [v.outcome.banishedFirst] : [];
@@ -1785,11 +1865,32 @@ function renderVote(force){
       ? `<button class="btn solid" type="button" data-vote="revote">Revote between ${v.outcome.ids.map(id => escapeHtml(nameOf(id))).join(" and ")}</button>` : "";
     const revealBtn = v.endgame ? "" : outIds.filter(id => !revealedRole(id)).map(id =>
       `<button class="btn solid" type="button" data-reveal-role="${escapeHtml(id)}">Reveal ${escapeHtml(nameOf(id))}'s role</button>`).join("");
-    hostActs = `<div class="acts">${tieBtns}${revealBtn}<button class="btn small" type="button" data-vote="dismiss">Close the vote</button></div>`;
+    let deadlockActs = "";
+    if (v.outcome.type === "deadlock" && !v.outcome.fatePending){
+      const o = v.outcome;
+      deadlockActs = `<div class="ghost-block" style="text-align:left;max-width:640px;margin-inline:auto;width:100%"><b>Was it unanimous?</b>
+        <span class="muted">If everyone agreed, tap ${o.need === 2 ? "the two players" : "the player"} they chose, then confirm. Otherwise choose "Not unanimous".</span>
+        <div class="choices">${o.ids.map(id => `<button class="choice" type="button" data-deadlock="${escapeHtml(id)}" aria-pressed="${deadlockSel.includes(id)}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}</span></button>`).join("")}</div>
+        <div class="acts" style="justify-content:flex-start;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn solid" type="button" data-vote="unanimous" ${deadlockSel.length === o.need ? "" : "disabled"}>${deadlockSel.length === o.need ? `Unanimous: banish ${deadlockSel.map(id => escapeHtml(nameOf(id))).join(" and ")}` : `Choose ${o.need === 2 ? "two players" : "a player"}`}</button>
+          <button class="btn danger" type="button" data-vote="not-unanimous">Not unanimous</button></div></div>`;
+    } else if (v.outcome.type === "deadlock" && v.outcome.fatePending){
+      const f = fateState();
+      deadlockActs = f && f.round === v.round ? `<div class="ghost-block" style="max-width:640px;margin-inline:auto;width:100%"><b>Only you can see this</b>
+        <span>Fate has chosen <b>${f.picks.map(id => escapeHtml(nameOf(id))).join(" and ")}</b>.</span>
+        <div class="acts"><button class="btn solid" type="button" data-vote="reveal-fate">Reveal fate's choice</button></div></div>` : "";
+    }
+    hostActs = `${deadlockActs}<div class="acts">${tieBtns}${revealBtn}<button class="btn small" type="button" data-vote="dismiss">Close the vote</button></div>`;
   }
   stage.innerHTML = `${kick}<h3>The castle has spoken</h3>${banishedPortrait}${verdictHtml(v, roleTime)}${talliesHtml(v.revealed || [])}${hostActs}`;
 }
 $("voteStage").addEventListener("click", e => {
+  const dl = e.target.closest("[data-deadlock]");
+  if (dl){
+    const o = (currentVote() || {}).outcome || {}, id = dl.dataset.deadlock;
+    deadlockSel = deadlockSel.includes(id) ? deadlockSel.filter(x => x !== id) : deadlockSel.concat([id]).slice(-(o.need || 1));
+    renderVote(true); return;
+  }
   const pick = e.target.closest("[data-pick]");
   if (pick){ pickTarget = pick.dataset.pick; renderVote(true); return; }
   const tie = e.target.closest("[data-tie]");
@@ -1802,6 +1903,9 @@ $("voteStage").addEventListener("click", e => {
   if (a === "submit" && (pickTarget || myVoteTarget(v))) submitVote(pickTarget || myVoteTarget(v));
   else if (a === "reveal") requestReveal();
   else if (a === "ghost-reveal") revealGhostVote();
+  else if (a === "unanimous") unanimousDecision();
+  else if (a === "not-unanimous") notUnanimous();
+  else if (a === "reveal-fate") revealFate();
   else if (a === "revote" && v.outcome && v.outcome.type === "tie") startVote({ candidates: v.outcome.ids, endgame: !!v.endgame, double: v.outcome.need === 2 });
   else if (a === "force") forceReveal();
   else if (a === "close") putVote({ ...v, endsAt: Date.now() - GRACE_MS }).catch(()=> toast("Voting couldn't be closed. Try again."));
@@ -3505,7 +3609,7 @@ function buildChart(){
     else if (e.type === "elim" && e.state === "banished"){
       cur.banishedList = (cur.banishedList || []).concat([e]); cur.banished = cur.banishedList[0]; pushElim(e.id, idx + 1, "Banished");
       const lastVote = cur.votes[cur.votes.length - 1], o = lastVote && lastVote.outcome;
-      const expect = o && (o.type === "double" || (o.type === "tie" && o.banishedFirst)) ? 2 : 1;
+      const expect = o && (o.type === "double" || (o.type === "tie" && o.banishedFirst) || (o.type === "deadlock" && (o.need === 2 || o.banishedFirst))) ? 2 : 1;
       if (cur.banishedList.length >= expect){ cols.push(cur); cur = { votes: [], murders: [], night: null, banished: null }; }
     }
   });
