@@ -293,6 +293,14 @@ html.screen-mode,body.screen-mode{height:100%}
 .announce-composer textarea{background:var(--stone-2);border:1px solid var(--brass-dim);color:var(--parchment);padding:12px 14px;font:inherit;width:100%;min-width:0;resize:vertical}
 .announce-composer textarea:focus-visible{outline:2px solid var(--parchment);outline-offset:3px}
 @media (prefers-reduced-motion:reduce){.announce{animation:none}}
+.break-bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:14;margin:14px 0 0;padding:10px 16px;border:1px solid var(--brass);background:linear-gradient(180deg,#221c13,#15120d);box-shadow:0 10px 24px -12px rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;text-align:center}
+.break-label{font-size:.8rem;letter-spacing:.2em;text-transform:uppercase;color:var(--brass)}
+.break-clock{font-family:var(--font-display);font-size:1.9rem;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.break-bar.low .break-clock{color:#e3a0a0}
+.break-host{display:flex;gap:8px}
+.screen-mode .break-bar{margin:0;padding:10px 20px;flex:none}
+.screen-mode .break-label{font-size:clamp(.9rem,1.6vw,1.3rem)}
+.screen-mode .break-clock{font-size:clamp(2.2rem,5vw,4rem)}
 .award-list{display:flex;flex-direction:column;gap:8px;width:100%;max-width:720px;margin-inline:auto;text-align:left}
 .award-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--brass-dim);background:var(--stone)}
 .award-row.current{border-color:var(--brass);box-shadow:inset 0 0 0 1px var(--brass)}
@@ -389,6 +397,15 @@ details.ghost-block > summary:focus-visible{outline:2px solid var(--parchment);o
     <span class="announce-kicker">An announcement from your host</span>
     <p id="announceMsg" class="announce-msg"></p>
     <button class="btn small" type="button" id="announceClose" hidden>Close announcement</button>
+  </section>
+
+  <section id="breakBar" class="break-bar" hidden role="timer" aria-live="off">
+    <span id="breakLabel" class="break-label"></span>
+    <span id="breakClock" class="break-clock"></span>
+    <span id="breakHost" class="break-host" hidden>
+      <button class="btn small" type="button" data-break="add">+1 min</button>
+      <button class="btn small" type="button" data-break="stop">Stop timer</button>
+    </span>
   </section>
 
   <!-- GATE -->
@@ -650,6 +667,7 @@ $("setupForm").addEventListener("submit", async e => {
 function startSubs(){
   if (subsStarted) return; subsStarted = true;
   db.doc("game/announce").onSnapshot(s => { liveAnnounce = s.exists ? s.data() : null; renderAnnounce(); }, ()=>{});
+  db.doc("game/break").onSnapshot(s => { liveBreak = s.exists ? s.data() : null; renderBreak(); }, ()=>{});
   db.doc("settings/screen").onSnapshot(s => { screenSetting = s.exists ? s.data() : null; renderWall(); }, ()=>{});
   db.doc("settings/ghost").onSnapshot(s => { ghostSetting = s.exists ? s.data() : null; renderWall(); }, ()=>{});
   db.doc("game/ghosts").onSnapshot(s => { liveGhostBoard = s.exists ? s.data() : null; renderWall(); }, ()=>{});
@@ -779,6 +797,7 @@ async function clearNightData(){
   await db.doc("host/mips").delete().catch(()=>{});
   await db.doc("host/double").delete().catch(()=>{});
   await db.doc("host/fate").delete().catch(()=>{});
+  await db.doc("game/break").delete().catch(()=>{});
   await db.doc("game/plain").delete().catch(()=>{});
   await db.doc("game/chain").delete().catch(()=>{});
   await Promise.all(Object.keys(cpicks).map(id => db.doc("cpicks/"+id).delete().catch(()=>{})));
@@ -1930,7 +1949,7 @@ $("voteStage").addEventListener("click", e => {
   else if (a === "revote" && v.outcome && v.outcome.type === "tie") startVote({ candidates: v.outcome.ids, endgame: !!v.endgame, double: v.outcome.need === 2 });
   else if (a === "force") forceReveal();
   else if (a === "close") putVote({ ...v, endsAt: Date.now() - GRACE_MS }).catch(()=> toast("Voting couldn't be closed. Try again."));
-  else if (a === "dismiss") putVote({ ...v, phase:"closed" }).catch(()=> toast("The vote couldn't be closed. Try again."));
+  else if (a === "dismiss") putVote({ ...v, phase:"closed" }).then(() => { if (!v.endgame) startBreak(""); }).catch(()=> toast("The vote couldn't be closed. Try again."));
 });
 setInterval(() => { renderVote(false); hostAutomation(); }, 250);
 
@@ -2114,12 +2133,11 @@ async function startPlainSight(minutes, taskIndex){
   const candidates = living.filter(id => R[id] === "faithful");
   if (!traitors.length){ toast("There are no Traitors left in the game"); return; }
   if (!candidates.length){ toast("There are no Faithful left to murder"); return; }
-  const mins = Math.max(1, Math.min(240, Math.round(minutes) || 20));
   const now = Date.now();
   const task = PLAIN_TASKS[taskIndex] || PLAIN_TASKS[Math.floor(Math.random() * PLAIN_TASKS.length)];
   try {
     if (isTrial()) trialGame.mipsUsed = true; else await db.doc("host/mips").set({ used: true, at: now });
-    await setTurret({ round: (turretState()?.round || 0) + 1, mode:"plain", phase:"task", phaseAt: now, task, deadline: now + mins * 60000, minutes: mins,
+    await setTurret({ round: (turretState()?.round || 0) + 1, mode:"plain", phase:"task", phaseAt: now, task, 
       traitors, candidates, shortlist: [], victim: null, tie: null });
     plainSetup = false; plainSel = null;
     toast("The Traitors have their task");
@@ -2235,7 +2253,7 @@ async function putMurder(m){
 }
 async function endMurder(){
   const m = murderState(); if (!m) return;
-  try { await putMurder({ ...m, phase:"closed" }); await expireShields(m.startedAt); } catch(_){ toast("The murder phase couldn't end. Try again."); }
+  try { await putMurder({ ...m, phase:"closed" }); await expireShields(m.startedAt); await startBreak("Until the Round Table"); } catch(_){ toast("The murder phase couldn't end. Try again."); }
 }
 
 /* ----- traitor and recruit actions ----- */
@@ -2305,7 +2323,8 @@ async function turretAutomation(){
         // Sample traitors make their picks on their own.
         t.traitors.filter(id => id !== TRIAL_ME).forEach(id => {
           const p = trialPicks[id];
-          if (t.phase === "nominate" && !(p && p.round === t.round)){
+          // (a pick from the murder-or-recruit choice earlier tonight doesn't count as nominations)
+          if (t.phase === "nominate" && !(p && p.round === t.round && p.noms && p.noms.length)){
             const pool = shuffle(t.candidates.slice());
             trialPicks[id] = { round: t.round, noms: pool.slice(0, Math.random() < 0.5 ? 1 : 2), vote: null };
           } else if (t.phase === "vote" && !(p && p.round === t.round && p.vote && (p.attempt || 1) === (t.attempt || 1))){
@@ -2352,20 +2371,17 @@ function renderTurret(force){
   let html = "", key = "";
 
   if (host && gameState().started && plainSetup && !turretActive() && !murderActive()){
-    key = ["plainsetup", plainMinutes, plainTask].join("|");
+    key = ["plainsetup", plainTask].join("|");
     html = `<span class="kicker">Murder in plain sight</span><h3>Choose the Traitors' task</h3>
-      <p style="margin:0;max-width:56ch;margin-inline:auto">The Traitors must complete this task without being caught. Only you will see the time limit. This can only be used once per game.</p>
+      <p style="margin:0;max-width:56ch;margin-inline:auto">The Traitors must complete this task without being caught. This can only be used once per game.</p>
       <div class="task-list" role="radiogroup" aria-label="Task">${PLAIN_TASKS.map((t, i) => `<button class="task-opt" type="button" role="radio" aria-checked="${plainTask === i}" data-plaintask="${i}"><span class="task-num">${i + 1}</span><span>${escapeHtml(t)}</span></button>`).join("")}</div>
-      <div class="field" style="max-width:220px;margin-inline:auto;text-align:center"><label for="plainMins">Time limit (minutes)</label><input id="plainMins" type="number" min="1" max="240" value="${plainMinutes}" inputmode="numeric"></div>
       <div class="acts"><button class="btn solid" type="button" data-turret="plain-start" ${plainTask == null ? "disabled" : ""}>${plainTask == null ? "Choose a task" : "Give the Traitors their task"}</button><button class="link" type="button" data-turret="plain-cancel">Cancel</button></div>`;
   } else if (host && gameState().started && (turretActive() || murderActive())){
     if (!murderActive() && t.mode === "plain" && t.phase === "task"){
-      const left = t.deadline - Date.now();
-      key = ["plaintask", t.round, plainSel, left > 0, Math.ceil(Math.max(0, left) / 1000)].join("|");
+      key = ["plaintask", t.round, plainSel].join("|");
       html = `<span class="kicker">Murder in plain sight · Night ${t.round}</span><h3>The Traitors are on the hunt</h3>
         <p style="margin:0">Their task: <b>${escapeHtml(t.task)}</b></p>
-        <div class="clock ${left <= 60000 ? "low" : ""}">${left > 0 ? fmtClock(left) : "Time's up"}</div>
-        <p class="muted" style="margin:0">Only you can see the time limit (${t.minutes} min). When the Traitors tell you it's done, check their proof, then choose the victim they named.</p>
+        <p class="muted" style="margin:0">When the Traitors tell you it's done, check their proof, then choose the victim they named.</p>
         <div class="choices">${t.candidates.filter(id => livingIds().includes(id)).map(id => choiceBtn(id, plainSel ? [plainSel] : [], "data-plainsel")).join("")}</div>
         <div class="acts">
           <button class="btn solid danger" type="button" data-turret="plain-confirm" ${plainSel ? "" : "disabled"}>${plainSel ? `Task done: murder ${escapeHtml(nameOf(plainSel))}` : "Choose the victim"}</button>
@@ -2506,7 +2522,7 @@ function renderTurret(force){
 }
 $("turretStage").addEventListener("click", e => {
   const pt = e.target.closest("[data-plaintask]");
-  if (pt){ const m = $("plainMins"); if (m) plainMinutes = parseInt(m.value, 10) || plainMinutes; plainTask = parseInt(pt.dataset.plaintask, 10); renderTurret(true); return; }
+  if (pt){ plainTask = parseInt(pt.dataset.plaintask, 10); renderTurret(true); return; }
   if (e.target.closest("[data-act='reveal']")){ revealed = true; renderWall(); return; }
   const tsel = e.target.closest("[data-tsel]");
   if (tsel){
@@ -2535,7 +2551,7 @@ $("turretStage").addEventListener("click", e => {
   else if (a === "pick-recruit") submitDecide("recruit");
   else if (a === "offer-yes") answerOffer(true);
   else if (a === "offer-no") answerOffer(false);
-  else if (a === "plain-start" && plainTask != null){ plainMinutes = parseInt(($("plainMins") || {}).value, 10) || 20; startPlainSight(plainMinutes, plainTask).then(() => { plainTask = null; }); }
+  else if (a === "plain-start" && plainTask != null){ startPlainSight(0, plainTask).then(() => { plainTask = null; }); }
   else if (a === "plain-cancel"){ plainSetup = false; renderWall(); }
   else if (a === "plain-confirm" && plainSel) resolvePlain(plainSel);
   else if (a === "plain-fail") resolvePlain(null);
@@ -3221,6 +3237,46 @@ function chainBanner(){
   return `<div class="lead"><span class="kicker">Safety Chain</span><span class="big">These ${c.remaining.length} remain unsafe tonight</span><span class="muted">One of them may not survive the night.</span></div>`;
 }
 setInterval(() => { chainAutomation(); }, 300);
+
+/* ---------- Break timer ---------- */
+// After each banishment and each murder, a 5-minute countdown sits at the top of every
+// phone, the host's page and the community screen. It lives in game/break.
+const BREAK_MS = 5 * 60000, BREAK_LINGER_MS = 60000;
+let liveBreak = null;
+const breakState = () => isTrial() ? (trialGame.breakTimer || null) : liveBreak;
+async function putBreak(b){
+  if (isTrial()){ trialGame.breakTimer = b; saveTrial(); renderBreak(); return; }
+  await db.doc("game/break").set(b);
+}
+async function startBreak(label){
+  if (!gameState().started) return;
+  const f = fireState(); if (f && f.phase !== "closed") return;   // not once the Fire Pit has begun
+  try { await putBreak({ active: true, label, endsAt: Date.now() + BREAK_MS, at: Date.now() }); } catch(_){}
+}
+function renderBreak(){
+  const bar = $("breakBar"), b = breakState();
+  const inCastle = role === "host" || role === "player" || role === "screen" || role === "trial";
+  const f = fireState();
+  // Keeps running through the Turret; hidden during a vote, breakfast or the Fire Pit.
+  const busy = voteBusy() || murderActive() || (f && f.phase !== "closed");
+  const left = b ? b.endsAt - Date.now() : 0;
+  const show = !!(b && b.active) && inCastle && gameState().started && !busy && left > -BREAK_LINGER_MS;
+  bar.hidden = !show;
+  if (!show) return;
+  const label = left > 0 ? (b.label || "") : "Time's up";
+  $("breakLabel").textContent = label; $("breakLabel").hidden = !label;
+  $("breakClock").textContent = left > 0 ? fmtClock(left) : "0:00";
+  bar.classList.toggle("low", left <= 60000);
+  $("breakHost").hidden = !isHostView();
+}
+$("breakBar").addEventListener("click", async e => {
+  const a = e.target.closest("[data-break]")?.dataset.break, b = breakState(); if (!a || !b) return;
+  try {
+    if (a === "add") await putBreak({ ...b, endsAt: Math.max(b.endsAt, Date.now()) + 60000 });
+    else await putBreak({ ...b, active: false });
+  } catch(_){ toast("That didn't save. Try again."); }
+});
+setInterval(renderBreak, 500);
 
 /* ---------- Host announcements ---------- */
 // game/announce holds the current message; it stays up on every phone until the host closes it.
