@@ -1446,16 +1446,37 @@ function getLocked(v){
 async function closeVote(v){
   await lockVotes(v);
   trialRevealReq = false;
-  const order = shuffle(v.voters.slice());
-  if (v.ghostVote && (getLocked(v) || {})[GHOSTS_ID]) order.push(GHOSTS_ID); // the ghosts speak last
+  const L = getLocked(v) || {}, D = getLockedDaggers(v) || {};
+  const order = suspenseOrder(v.voters, L, D);
+  if (v.ghostVote && L[GHOSTS_ID]) order.push(GHOSTS_ID); // the ghosts speak last
   // The whole reveal fits in about a minute: each vote gets an equal slice of the time,
   // split between calling the name and showing the vote. Dagger votes get a little extra.
-  const L = getLocked(v) || {}, D = getLockedDaggers(v) || {};
   const daggers = order.filter(id => L[id] && D[id]).length;
   const extra = Math.min(DAGGER_EXTRA_MS, 3000);
   const slot = Math.max(2500, Math.min(7500, (REVEAL_TOTAL_MS - daggers * extra - order.length * 250) / Math.max(1, order.length)));
   const callMs = Math.max(900, Math.round(slot * 0.35)), showMs = Math.round(slot - callMs);
   await putVote({ ...v, phase:"reveal", order, step: 0, promptAt: Date.now(), shownAt: null, revealed: [], callMs, showMs, daggerMs: extra, daggerCall: daggerCallFor(v, order[0]) });
+}
+// Reveal order, Survivor style: anyone who didn't vote goes first, then the votes are read
+// so the tallies stay as level as possible. Whoever is trailing gets the next vote, smaller
+// piles go before bigger ones, and the player being banished is clinched on the last vote.
+function suspenseOrder(voters, L, D){
+  const blank = shuffle(voters.filter(id => !L[id]));
+  const piles = {}, total = {}, tally = {};
+  shuffle(voters.filter(id => L[id])).forEach(id => {
+    const t = L[id], w = D[id] ? 2 : 1;
+    (piles[t] = piles[t] || []).push(id); total[t] = (total[t] || 0) + w; tally[t] = 0;
+  });
+  const out = [];
+  let left = Object.values(piles).reduce((n, p) => n + p.length, 0);
+  while (left--){
+    const t = Object.keys(piles).filter(k => piles[k].length)
+      .sort((a, b) => tally[a] - tally[b] || total[a] - total[b] || Math.random() - .5)[0];
+    // Within one pile, a Dagger vote waits until last, when it matters most.
+    const pile = piles[t]; pile.sort((a, b) => (D[a] ? 1 : 0) - (D[b] ? 1 : 0));
+    const id = pile.shift(); out.push(id); tally[t] += D[id] ? 2 : 1;
+  }
+  return blank.concat(out);
 }
 // The reveal runs on its own: each voter's name is called, and after a short pause their vote appears.
 const CALL_MS = 2500, REVEAL_TOTAL_MS = 60000, GHOST_SUSPENSE_MS = 3500, GHOST_HOLD_MS = 9000;
@@ -3471,6 +3492,8 @@ async function recordVoteStats(v, outcome){
   (v.revealed || []).forEach(r => { if (r.voter !== GHOSTS_ID){ votes[r.voter] = r.target || null; if ((r.weight || 1) > 1) weights[r.voter] = r.weight; } });
   await logEvent({ type:"vote", round: v.round, revote: !!v.isRevote, endgame: !!v.endgame, votes, weights, ghost: (v.revealed || []).find(r => r.voter === GHOSTS_ID)?.target || null, outcome: outcome || null });
   await bumpStats(s => {
+    s.inVote = s.inVote || {};
+    (v.voters || []).forEach(id => add(s.inVote, id));
     (v.revealed || []).forEach(r => {
       if (!r.target) return;
       add(s.received, r.target, r.weight || 1);
@@ -3500,7 +3523,9 @@ function computeAwards(plan){
     return ids.filter(id => get(k, id) === target);
   };
   const out = [];
-  const voters = all.filter(id => get("cast", id) > 0);
+  // Only players who took part in at least one banishment vote can win the voting awards.
+  const inVote = all.filter(id => get("inVote", id) > 0 || get("cast", id) > 0);
+  const voters = inVote.filter(id => get("cast", id) > 0);
 
   let w = best(voters, "traitorVotes", "max");
   if (w.length && get("traitorVotes", w[0]) > 0) out.push({ title: "Bloodhound", desc: "Voted for a Traitor the most times", ids: w, line: plural(get("traitorVotes", w[0]), "vote for a Traitor", "votes for Traitors") });
@@ -3508,12 +3533,12 @@ function computeAwards(plan){
   w = best(voters, "traitorVotes", "min");
   if (w.length) out.push({ title: "Blind as a Bat", desc: "Voted for a Traitor the fewest times", ids: w, line: plural(get("traitorVotes", w[0]), "vote for a Traitor", "votes for Traitors") });
 
-  w = best(all, "received", "max");
+  w = best(inVote, "received", "max");
   if (w.length && get("received", w[0]) > 0) out.push({ title: "Most Wanted", desc: "Received the most banishment votes", ids: w, line: plural(get("received", w[0]), "vote received", "votes received") });
 
-  const none = all.filter(id => get("received", id) === 0);
+  const none = inVote.filter(id => get("received", id) === 0);
   if (none.length) out.push({ title: "Under the Radar", desc: "Never received a single banishment vote", ids: none, line: "0 votes received" });
-  else { w = best(all, "received", "min"); if (w.length) out.push({ title: "Under the Radar", desc: "Received the fewest banishment votes", ids: w, line: plural(get("received", w[0]), "vote received", "votes received") }); }
+  else { w = best(inVote, "received", "min"); if (w.length) out.push({ title: "Under the Radar", desc: "Received the fewest banishment votes", ids: w, line: plural(get("received", w[0]), "vote received", "votes received") }); }
 
   w = best(everFaithful, "shortlisted", "max");
   if (w.length && get("shortlisted", w[0]) > 0) out.push({ title: "On the Menu", desc: "Shortlisted for murder the most times", ids: w, line: "shortlisted " + plural(get("shortlisted", w[0]), "time", "times") });
@@ -3527,11 +3552,11 @@ function computeAwards(plan){
   w = best(traitorsEver, "murderPicks", "max");
   if (w.length && get("murderPicks", w[0]) > 0) out.push({ title: "Grim Reaper", desc: "The Traitor whose picks were murdered most often", ids: w, line: plural(get("murderPicks", w[0]), "murder", "murders") });
 
-  w = best(all, "closeCalls", "max");
+  w = best(inVote, "closeCalls", "max");
   if (w.length && get("closeCalls", w[0]) > 0) out.push({ title: "Close Call", desc: "Survived the most tie revotes", ids: w, line: "survived " + plural(get("closeCalls", w[0]), "revote", "revotes") });
 
   const winners = plan.winner === "traitors" ? plan.traitorsLeft : (plan.order || []).filter(id => plan.allRoles[id] !== "traitor");
-  const perfect = winners.filter(id => get("received", id) === 0);
+  const perfect = winners.filter(id => inVote.includes(id) && get("received", id) === 0);
   if (perfect.length) out.push({ title: "Perfect Game", desc: "Never received a banishment vote, and won", ids: perfect, line: "0 votes received · won as " + (plan.winner === "traitors" ? "a Traitor" : "Faithful") });
   return out;
 }
