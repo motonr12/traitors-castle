@@ -131,6 +131,7 @@ button,input{font:inherit}
 .clock.low{color:#f0b8b2}
 .choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;text-align:left}
 .choice{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--brass-dim);background:var(--stone);color:var(--parchment);cursor:pointer;font:inherit;min-width:0}
+.choice:disabled{opacity:.38;cursor:not-allowed;filter:grayscale(.7)}
 .choice img,.choice .ph{width:40px;height:52px;object-fit:cover;flex:none;background:var(--oak)}
 .choice span{overflow-wrap:anywhere;font-family:var(--font-display);letter-spacing:.06em}
 .choice[aria-pressed="true"]{border-color:var(--parchment);background:var(--brass);color:var(--stone)}
@@ -2050,19 +2051,47 @@ const turretOrMurderBusy = () => turretActive() || murderActive() || chainLive()
 function myTurretView(){
   if (isTrial()){
     const t = trialGame.turret;
-    return t && t.traitors.includes(TRIAL_ME) ? { ...t, progress: turretProgress(t) } : null;
+    return t && t.traitors.includes(TRIAL_ME) ? { ...t, progress: turretProgress(t), taken: nominationsOf(t) } : null;
   }
   return myTurret;
 }
 function myPickView(){ return isTrial() ? (trialPicks[TRIAL_ME] || null) : myPick; }
 
+/* ----- who does what in the Turret ----- */
+// One Traitor chooses the victim; the others build the shortlist they choose from.
+//  3+ Traitors: each shortlister picks 2 Faithful if more than 10 Faithful remain, otherwise 1.
+//  2 Traitors: the shortlister picks 2 or 3 Faithful.
+//  1 Traitor: they choose straight from every Faithful.
+// The chooser rotates: whoever has gone longest without choosing goes next (never chosen goes first).
+function nextChooser(traitors){
+  const last = (statsNow().chooserAt || {});
+  const order = shuffle(traitors.slice()).sort((a, b) => (last[a] || 0) - (last[b] || 0));
+  return order[0];
+}
+function turretRoles(traitors, candidates){
+  const F = candidates.length;
+  if (traitors.length <= 1) return { chooser: traitors[0] || null, shortlisters: [], nomMin: 0, nomMax: 0 };
+  const chooser = nextChooser(traitors), shortlisters = traitors.filter(id => id !== chooser);
+  if (traitors.length === 2) return { chooser, shortlisters, nomMin: Math.min(2, F), nomMax: Math.min(3, F) };
+  const n = Math.min(F > 10 ? 2 : 1, F);
+  return { chooser, shortlisters, nomMin: n, nomMax: n };
+}
+// Opens the shortlisting for a night (or goes straight to the choice when there's nobody to shortlist).
+function withShortlisting(t){
+  const r = turretRoles(t.traitors, t.candidates);
+  const solo = !r.shortlisters.length;
+  return { ...t, ...r, phase: solo ? "vote" : "nominate", shortlist: solo ? t.candidates.slice() : [], attempt: 1, phaseAt: Date.now() };
+}
+const shortlistersOf = t => t.shortlisters || t.traitors;
+const pickFor = (t, p) => !!p && p.round === t.round && (p.sub || 0) === (t.sub || 0);
 function turretProgress(t){
-  const P = picksMap();
-  const nominated = t.traitors.filter(id => P[id] && P[id].round === t.round && (P[id].noms || []).length).length;
+  const P = picksMap(), sl = shortlistersOf(t);
+  const nominated = sl.filter(id => pickFor(t, P[id]) && (P[id].noms || []).length).length;
   const att = t.attempt || 1;
-  const voted = t.traitors.filter(id => P[id] && P[id].round === t.round && P[id].vote && (P[id].attempt || 1) === att).length;
+  const voters = t.chooser ? [t.chooser] : t.traitors;
+  const voted = voters.filter(id => pickFor(t, P[id]) && P[id].vote && (P[id].attempt || 1) === att).length;
   const decided = t.traitors.filter(id => P[id] && P[id].round === t.round && P[id].decide).length;
-  return { nominated, voted, decided, total: t.traitors.length };
+  return { nominated, nomTotal: sl.length, voted, voteTotal: voters.length, decided, total: t.traitors.length };
 }
 async function setTurret(t){
   // An optional recruit is asked first; a forced recruit simply becomes a Traitor after breakfast.
@@ -2079,7 +2108,7 @@ async function setTurret(t){
   if (t.phase === "closed" && t.declined) await db.doc("turret/"+t.declined).set({ round: t.round, phase:"closed" });
 }
 async function decideMode(t, mode){
-  await setTurret({ ...t, mode, phase:"nominate", phaseAt: Date.now() });
+  await setTurret(withShortlisting({ ...t, mode }));
 }
 async function resolveOffer(t, accepted){
   if (accepted) await setTurret({ ...t, phase:"chosen", accepted: true, phaseAt: Date.now() });
@@ -2087,16 +2116,18 @@ async function resolveOffer(t, accepted){
     // Declined: the night becomes a murder instead. The decliner can still be chosen.
     if (!isTrial()) await db.doc("turret/"+t.victim).set({ round: t.round, phase:"declined" });
     trialPicks = {};
-    await setTurret({ ...t, mode:"murder", phase:"nominate", phaseAt: Date.now(), declined: t.victim, victim: null, shortlist: [], tie: null, attempt: 1, randomPick: false, accepted: false });
+    // Same chooser and shortlisters; fresh picks (sub marks them as a new set for the same night).
+    const solo = !(t.shortlisters || []).length;
+    await setTurret({ ...t, mode:"murder", phase: solo ? "vote" : "nominate", phaseAt: Date.now(), declined: t.victim, victim: null, shortlist: solo ? t.candidates.slice() : [], tie: null, attempt: 1, randomPick: false, accepted: false, sub: (t.sub || 0) + 1 });
   }
 }
 async function fanOut(t, force){
   if (isTrial() || !t) return;
   const progress = turretProgress(t);
-  const key = JSON.stringify([t.round, t.mode, t.phase, t.attempt, t.shortlist, t.victim, t.tie, progress]);
+  const key = JSON.stringify([t.round, t.sub, t.mode, t.phase, t.attempt, t.shortlist, t.victim, t.tie, progress, nominationsOf(t)]);
   if (!force && key === lastFanKey) return;
   lastFanKey = key;
-  const view = { round: t.round, optional: !!t.optional, declined: t.declined || null, accepted: !!t.accepted, mode: t.mode || "murder", task: t.task || null, failed: !!t.failed, phase: t.phase, attempt: t.attempt || 1, candidates: t.candidates, shortlist: t.shortlist, victim: t.victim, tie: t.tie, firstTie: t.firstTie || null, randomPick: !!t.randomPick, progress };
+  const view = { round: t.round, sub: t.sub || 0, chooser: t.chooser || null, shortlisters: t.shortlisters || null, nomMin: t.nomMin || 1, nomMax: t.nomMax || 2, taken: nominationsOf(t), optional: !!t.optional, declined: t.declined || null, accepted: !!t.accepted, mode: t.mode || "murder", task: t.task || null, failed: !!t.failed, phase: t.phase, attempt: t.attempt || 1, candidates: t.candidates, shortlist: t.shortlist, victim: t.victim, tie: t.tie, firstTie: t.firstTie || null, randomPick: !!t.randomPick, progress };
   await Promise.all(t.traitors.map(id => db.doc("turret/"+id).set(view)));
 }
 
@@ -2163,7 +2194,8 @@ async function startTurret(){
   const mode = rule === "forced" ? "recruit" : rule === "optional" ? "pending" : "murder";
   trialPicks = {};
   try {
-    await setTurret({ round: (turretState()?.round || 0) + 1, mode, optional: rule === "optional", phase: mode === "pending" ? "decide" : "nominate", phaseAt: Date.now(), traitors, candidates, shortlist: [], victim: null, tie: null });
+    const base = { round: (turretState()?.round || 0) + 1, mode, optional: rule === "optional", phase:"decide", phaseAt: Date.now(), traitors, candidates, shortlist: [], victim: null, tie: null };
+    await setTurret(mode === "pending" ? base : withShortlisting(base));
     toast(mode === "recruit" ? "Only one Traitor is left, so they must recruit tonight"
       : mode === "pending" ? "The Traitors may choose to murder or recruit tonight"
       : "The Traitors have been summoned to the Turret");
@@ -2171,18 +2203,25 @@ async function startTurret(){
 }
 function nominationsOf(t){
   const P = picksMap(), out = [];
-  t.traitors.forEach(id => { const p = P[id]; if (p && p.round === t.round) (p.noms || []).forEach(n => { if (t.candidates.includes(n) && !out.includes(n)) out.push(n); }); });
+  shortlistersOf(t).forEach(id => { const p = P[id]; if (pickFor(t, p)) (p.noms || []).forEach(n => { if (t.candidates.includes(n) && !out.includes(n)) out.push(n); }); });
   return out;
 }
 async function closeNominations(t){
   const shortlist = nominationsOf(t);
   if (!shortlist.length){ toast("No one has been nominated yet"); return; }
   if (t.mode === "murder") await recordShortlist(shortlist).catch(()=>{});
-  if (shortlist.length === 1) await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), shortlist, victim: shortlist[0] });
+  if (shortlist.length === 1) await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), shortlist, victim: shortlist[0], onlyOne: true });
   else await setTurret({ ...t, phase:"vote", phaseAt: Date.now(), shortlist });
 }
 async function closeTurretVote(t){
   const P = picksMap(), counts = {};
+  if (t.chooser){
+    // One Traitor makes the choice: no ties to break.
+    const p = P[t.chooser], pick = pickFor(t, p) && t.shortlist.includes(p.vote) ? p.vote : null;
+    if (!pick){ toast(nameOf(t.chooser) + " hasn't chosen yet"); return; }
+    await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), victim: pick });
+    return;
+  }
   const att = t.attempt || 1;
   t.traitors.forEach(id => { const p = P[id]; if (p && p.round === t.round && (p.attempt || 1) === att && t.shortlist.includes(p.vote)) counts[p.vote] = (counts[p.vote] || 0) + 1; });
   const max = Math.max(0, ...Object.values(counts));
@@ -2232,6 +2271,7 @@ async function startMurder(){
   const ghostBetsLocked = ghostModeOn() ? snapshotBets("m" + round) : {};
   const PP = picksMap();
   const pickers = victim ? (t.traitors || []).filter(id => { const p = PP[id]; if (!p || p.round !== t.round) return false; return (p.noms && p.noms.length) ? p.noms.includes(victim) : p.vote === victim; }) : [];
+  if (t.chooser) await bumpStats(s => { s.chooserAt = { ...(s.chooserAt || {}), [t.chooser]: now }; }).catch(()=>{});
   const plan = { round, mode: t.mode || "murder", shields: livingIds().filter(id => hasShield(id)), pickers, ghostBets: ghostBetsLocked, victim: shielded ? null : victim, saved: shielded && !recruit && !failed ? victim : null, recruit: recruit ? victim : null, batches, finalSafe };
   const pub = { round, phase:"reveal", stage: batches.length ? "batches" : "suspense", startedAt: now,
     nextAt: now + (batches.length ? FIRST_BATCH_MS : FINAL_MS), total: field.length, shown: [], final: null, plain: t.mode === "plain" };
@@ -2259,6 +2299,12 @@ async function endMurder(){
 }
 
 /* ----- traitor and recruit actions ----- */
+// Faithful a shortlister can still pick: not already on another Traitor's list.
+function availableFor(t){
+  const mine = myPickView(), own = pickFor(t, mine) ? (mine.noms || []) : [];
+  const taken = (t.taken || []).filter(id => !own.includes(id));
+  return t.candidates.filter(id => !taken.includes(id));
+}
 async function submitDecide(choice){
   const t = myTurretView(); if (!t || t.phase !== "decide") return;
   if (isTrial()){ trialPicks[TRIAL_ME] = { round: t.round, decide: choice }; renderWall(); return; }
@@ -2281,21 +2327,22 @@ async function answerOffer(accept){
 }
 async function submitNoms(){
   const t = myTurretView(); if (!t || t.phase !== "nominate" || !turretSel.length) return;
-  const noms = turretSel.slice(0, 2);
-  if (isTrial()){ trialPicks[TRIAL_ME] = { round: t.round, noms, vote: null }; renderWall(); toast("Your picks are in"); return; }
+  const noms = turretSel.slice(0, t.nomMax || 2), sub = t.sub || 0;
+  if (noms.length < Math.min(t.nomMin || 1, availableFor(t).length)) return;
+  if (isTrial()){ trialPicks[TRIAL_ME] = { round: t.round, sub, noms, vote: null }; renderWall(); toast("Your picks are in"); return; }
   turretSaving = true; renderTurret(true);
-  try { await db.doc("tpicks/"+me).set({ round: t.round, noms, vote: null }); toast("Your picks are in"); }
+  try { await db.doc("tpicks/"+me).set({ round: t.round, sub, noms, vote: null }); toast("Your picks are in"); }
   catch(_){ toast("Your picks didn't go through. Try again."); }
   finally { turretSaving = false; renderTurret(true); }
 }
 async function submitTurretVote(){
   const t = myTurretView(); if (!t || t.phase !== "vote" || turretSel.length !== 1) return;
   const prev = myPickView();
-  const noms = prev && prev.round === t.round ? (prev.noms || []) : [];
-  const attempt = t.attempt || 1;
-  if (isTrial()){ trialPicks[TRIAL_ME] = { round: t.round, noms, vote: turretSel[0], attempt }; renderWall(); toast("Your vote is in"); return; }
+  const noms = pickFor(t, prev) ? (prev.noms || []) : [];
+  const attempt = t.attempt || 1, sub = t.sub || 0;
+  if (isTrial()){ trialPicks[TRIAL_ME] = { round: t.round, sub, noms, vote: turretSel[0], attempt }; renderWall(); toast("Your choice is in"); return; }
   turretSaving = true; renderTurret(true);
-  try { await db.doc("tpicks/"+me).set({ round: t.round, noms, vote: turretSel[0], attempt }); toast("Your vote is in"); }
+  try { await db.doc("tpicks/"+me).set({ round: t.round, sub, noms, vote: turretSel[0], attempt }); toast("Your choice is in"); }
   catch(_){ toast("Your vote didn't go through. Try again."); }
   finally { turretSaving = false; renderTurret(true); }
 }
@@ -2322,21 +2369,25 @@ async function turretAutomation(){
       if (ans === "accept" || ans === "decline") await resolveOffer(t, ans === "accept");
     } else if (t && (t.phase === "nominate" || t.phase === "vote")){
       if (isTrial() && now >= t.phaseAt + TRIAL_PICK_MS){
-        // Sample traitors make their picks on their own.
-        t.traitors.filter(id => id !== TRIAL_ME).forEach(id => {
+        // Sample traitors play their part on their own: shortlisters shortlist, the chooser chooses.
+        const sub = t.sub || 0;
+        if (t.phase === "nominate") shortlistersOf(t).filter(id => id !== TRIAL_ME).forEach(id => {
           const p = trialPicks[id];
-          // (a pick from the murder-or-recruit choice earlier tonight doesn't count as nominations)
-          if (t.phase === "nominate" && !(p && p.round === t.round && p.noms && p.noms.length)){
-            const pool = shuffle(t.candidates.slice());
-            trialPicks[id] = { round: t.round, noms: pool.slice(0, Math.random() < 0.5 ? 1 : 2), vote: null };
-          } else if (t.phase === "vote" && !(p && p.round === t.round && p.vote && (p.attempt || 1) === (t.attempt || 1))){
-            trialPicks[id] = { ...(p || { round: t.round, noms: [] }), round: t.round, attempt: t.attempt || 1, vote: t.shortlist[Math.floor(Math.random() * t.shortlist.length)] };
-          }
+          if (pickFor(t, p) && p.noms && p.noms.length) return;
+          const taken = nominationsOf(t), pool = shuffle(t.candidates.filter(c => !taken.includes(c)));
+          const lo = t.nomMin || 1, hi = t.nomMax || 2, n = lo + Math.floor(Math.random() * (hi - lo + 1));
+          if (pool.length) trialPicks[id] = { round: t.round, sub, noms: pool.slice(0, n), vote: null };
+        });
+        else (t.chooser ? [t.chooser] : t.traitors).filter(id => id !== TRIAL_ME).forEach(id => {
+          const p = trialPicks[id];
+          if (pickFor(t, p) && p.vote && (p.attempt || 1) === (t.attempt || 1)) return;
+          trialPicks[id] = { ...(pickFor(t, p) ? p : { noms: [] }), round: t.round, sub, attempt: t.attempt || 1, vote: t.shortlist[Math.floor(Math.random() * t.shortlist.length)] };
         });
       }
       const pr = turretProgress(t);
-      if (t.phase === "nominate" && pr.nominated === pr.total) await closeNominations(t);
-      else if (t.phase === "vote" && pr.voted === pr.total) await closeTurretVote(t);
+      // Shortlisting ends when every shortlister is in, or every Faithful is already on the list.
+      if (t.phase === "nominate" && (pr.nominated === pr.nomTotal || nominationsOf(t).length >= t.candidates.length)) await closeNominations(t);
+      else if (t.phase === "vote" && pr.voted === pr.voteTotal) await closeTurretVote(t);
       else await fanOut(t, false);
     }
     const m = murderState(), plan = planState();
@@ -2405,12 +2456,18 @@ function renderTurret(force){
       const pr = turretProgress(t), P = picksMap();
       const noms = nominationsOf(t);
       key = ["ht", t.round, t.phase, t.attempt, JSON.stringify(pr), JSON.stringify(noms), t.victim, JSON.stringify(t.tie)].join("|");
+      const waitTxt = "<span class=\"muted\">waiting…</span>";
       const perTraitor = t.traitors.map(id => {
-        const p = P[id] && P[id].round === t.round ? P[id] : null;
-        const what = t.phase === "nominate" ? (p && p.noms && p.noms.length ? namesList(p.noms) : "<span class=\"muted\">waiting…</span>")
-          : (p && p.vote && (p.attempt || 1) === (t.attempt || 1) ? namesList([p.vote]) : "<span class=\"muted\">waiting…</span>");
-        return `<li><b>${escapeHtml(nameOf(id))}</b> → ${what}</li>`;
+        const p = pickFor(t, P[id]) ? P[id] : null;
+        const isChooser = t.chooser === id;
+        const what = t.phase === "nominate"
+          ? (isChooser ? `<span class="muted">chooses the ${t.mode === "recruit" ? "recruit" : "victim"} from the shortlist</span>` : p && p.noms && p.noms.length ? namesList(p.noms) : waitTxt)
+          : (t.chooser && !isChooser ? `<span class="muted">shortlisted ${p && p.noms && p.noms.length ? namesList(p.noms) : "nobody"}</span>`
+            : p && p.vote && (p.attempt || 1) === (t.attempt || 1) ? namesList([p.vote]) : waitTxt);
+        return `<li><b>${escapeHtml(nameOf(id))}</b>${isChooser ? " (chooser)" : ""} → ${what}</li>`;
       }).join("");
+      const howMany = t.nomMin === t.nomMax ? `${t.nomMin}` : `${t.nomMin} or ${t.nomMax}`;
+      const target = t.mode === "recruit" ? "recruit" : "victim";
       let body = "", acts = "";
       if (t.phase === "decide"){
         const P2 = picksMap();
@@ -2421,11 +2478,13 @@ function renderTurret(force){
         body = `<div class="verdict">${escapeHtml(nameOf(t.victim))} has been offered a place among the Traitors.</div><p class="muted" style="margin:0">Waiting for their answer on their phone. If they decline, the Traitors murder someone instead.</p>`;
         acts = `<button class="btn small" type="button" data-turret="offer-accept">They accepted</button><button class="btn small danger" type="button" data-turret="offer-decline">They declined</button>`;
       } else if (t.phase === "nominate"){
-        body = `<p style="margin:0">${t.declined ? `${escapeHtml(nameOf(t.declined))} turned down the offer, so the Traitors must murder tonight. ` : ""}${t.mode === "recruit" ? (t.optional ? "The Traitors chose to recruit. Each is picking 1 or 2 Faithful to shortlist. The recruit will be able to say no." : "Only one Traitor is left, so they must recruit. The recruit can't refuse.") + " Each Traitor is picking 1 or 2 Faithful for the shortlist." : "Each Traitor is picking 1 or 2 Faithful for the shortlist."} ${pr.nominated} of ${pr.total} have chosen.</p><ul class="turret-list">${perTraitor}</ul>`;
-        acts = `<button class="btn small" type="button" data-turret="close-noms" ${pr.nominated ? "" : "disabled"}>Close nominations</button>`;
+        body = `<p style="margin:0">${t.declined ? `${escapeHtml(nameOf(t.declined))} turned down the offer, so the Traitors must murder tonight. ` : ""}${t.mode === "recruit" && t.optional ? "The Traitors chose to recruit. The recruit will be able to say no. " : ""}${namesList(t.shortlisters || [])} ${(t.shortlisters || []).length > 1 ? "are each" : "is"} shortlisting ${howMany} Faithful. ${t.chooser ? `<b>${escapeHtml(nameOf(t.chooser))}</b> will choose the ${target} from the shortlist.` : ""} ${pr.nominated} of ${pr.nomTotal} shortlists are in.</p><ul class="turret-list">${perTraitor}</ul>`;
+        acts = `<button class="btn small" type="button" data-turret="close-noms" ${pr.nominated ? "" : "disabled"}>Close the shortlist</button>`;
       } else if (t.phase === "vote"){
-        body = `<p style="margin:0">${(t.attempt || 1) > 1 ? `The first vote tied, so the Traitors are voting again between ${namesList(t.shortlist)}. Another tie and the victim is chosen at random.` : `Shortlist: ${namesList(t.shortlist)}.`} ${pr.voted} of ${pr.total} Traitors have voted.</p><ul class="turret-list">${perTraitor}</ul>`;
-        acts = `<button class="btn small" type="button" data-turret="close-vote" ${pr.voted ? "" : "disabled"}>Close the Traitors' vote</button>`;
+        body = t.chooser
+          ? `<p style="margin:0">${t.mode === "recruit" && !(t.shortlisters || []).length ? "Only one Traitor is left, so they must recruit. The recruit can't refuse. " : ""}${t.mode === "chain" ? "The unsafe" : (t.shortlisters || []).length ? "Shortlist" : "Every Faithful"}: ${namesList(t.shortlist)}. <b>${escapeHtml(nameOf(t.chooser))}</b> is choosing the ${target}.</p><ul class="turret-list">${perTraitor}</ul>`
+          : `<p style="margin:0">${(t.attempt || 1) > 1 ? `The first vote tied, so the Traitors are voting again between ${namesList(t.shortlist)}. Another tie and the victim is chosen at random.` : `Shortlist: ${namesList(t.shortlist)}.`} ${pr.voted} of ${pr.total} Traitors have voted.</p><ul class="turret-list">${perTraitor}</ul>`;
+        acts = t.chooser ? "" : `<button class="btn small" type="button" data-turret="close-vote" ${pr.voted ? "" : "disabled"}>Close the Traitors' vote</button>`;
       } else if (t.phase === "tie"){
         body = `<p style="margin:0">The Traitors are tied between ${namesList(t.tie)}. You decide who is murdered.</p>`;
         acts = t.tie.map(id => `<button class="btn small danger" type="button" data-victim="${escapeHtml(id)}">Murder ${escapeHtml(nameOf(id))}</button>`).join("");
@@ -2433,7 +2492,7 @@ function renderTurret(force){
         body = `<div class="verdict">The Traitors didn't complete their task.</div><p class="muted" style="margin:0">Nobody will be murdered. ${screenOn() ? "The community screen" : "Everyone's phones"} will still announce a murder in plain sight at breakfast.</p>`;
         acts = `<button class="btn solid" type="button" data-turret="start-murder">Start breakfast</button>`;
       } else if (t.phase === "chosen"){
-        body = `${t.randomPick ? `<p style="margin:0">The revote tied again between ${namesList(t.tie)}, so the victim was chosen at random.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(t.victim))} has been selected for ${t.mode === "recruit" ? "recruitment" : "murder"}.</div><p class="muted" style="margin:0">${t.mode === "recruit" ? "Only you and the Traitors can see this. Start breakfast when everyone is gathered. Nobody dies, and the new Traitor is told at the end of breakfast." : "Only you and the Traitors can see this. Start the murder when everyone is gathered for breakfast."}</p>${t.mode !== "recruit" && hasShield(t.victim) ? `<p class="shield-note" style="margin:0">${escapeHtml(nameOf(t.victim))} holds a shield. Nobody will be murdered tonight. The screen won't say why, and only ${escapeHtml(nameOf(t.victim))} will be told.</p>` : ""}`;
+        body = `${t.randomPick ? `<p style="margin:0">The revote tied again between ${namesList(t.tie)}, so the victim was chosen at random.</p>` : ""}${t.chooser && !t.onlyOne ? `<p style="margin:0">${escapeHtml(nameOf(t.chooser))} made the choice.</p>` : t.onlyOne ? `<p style="margin:0">Only one player made the shortlist.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(t.victim))} has been selected for ${t.mode === "recruit" ? "recruitment" : "murder"}.</div><p class="muted" style="margin:0">${t.mode === "recruit" ? "Only you and the Traitors can see this. Start breakfast when everyone is gathered. Nobody dies, and the new Traitor is told at the end of breakfast." : "Only you and the Traitors can see this. Start the murder when everyone is gathered for breakfast."}</p>${t.mode !== "recruit" && hasShield(t.victim) ? `<p class="shield-note" style="margin:0">${escapeHtml(nameOf(t.victim))} holds a shield. Nobody will be murdered tonight. The screen won't say why, and only ${escapeHtml(nameOf(t.victim))} will be told.</p>` : ""}`;
         acts = `<button class="btn solid" type="button" data-turret="start-murder">${t.mode === "recruit" ? "Start breakfast" : "Start murder"}</button>`;
       }
       html = `<span class="kicker">${t.mode === "plain" ? "Murder in plain sight" : t.mode === "chain" ? "Safety Chain · The Turret" : "The Turret"} · Night ${t.round}${t.mode === "recruit" ? " · Recruitment" : ""}</span><h3>${t.mode === "recruit" ? "The Traitors are recruiting" : "The Traitors are meeting"}</h3>${body}
@@ -2473,8 +2532,8 @@ function renderTurret(force){
       const pick = myPickView(), mine = pick && pick.round === tv.round ? pick : null;
       const selKey = tv.round + tv.phase + (tv.attempt || 1);
       if (selKey !== turretSelKey){ turretSelKey = selKey; turretSel = []; }
-      const pr = tv.progress || { nominated:0, voted:0, total:1 };
-      key = ["pt", tv.round, tv.mode, tv.task, tv.failed, tv.phase, tv.declined, tv.attempt, JSON.stringify(mine), JSON.stringify(turretSel), turretSaving, JSON.stringify(pr), tv.victim, JSON.stringify(tv.tie), revealed].join("|");
+      const pr = tv.progress || { nominated:0, nomTotal:1, voted:0, voteTotal:1, total:1 };
+      key = ["pt", tv.round, tv.sub, tv.chooser, JSON.stringify(tv.taken || []), tv.mode, tv.task, tv.failed, tv.phase, tv.declined, tv.attempt, JSON.stringify(mine), JSON.stringify(turretSel), turretSaving, JSON.stringify(pr), tv.victim, JSON.stringify(tv.tie), revealed].join("|");
       if (!revealed){
         html = `<span class="kicker">A secret message</span><h3>Shield your screen</h3><p class="muted" style="margin:0">Make sure nobody can see, then open it.</p>
           <div class="acts"><button class="btn solid" type="button" data-act="reveal">Open</button></div>`;
@@ -2495,11 +2554,34 @@ function renderTurret(force){
           ? `<span class="kicker">Murder in plain sight</span><h3>The task failed</h3><p style="margin:0">Nobody will be murdered tonight. Keep a straight face at breakfast.</p>`
           : `<span class="kicker">Murder in plain sight</span><h3>The deed is done</h3><div class="verdict role-traitor">${escapeHtml(nameOf(tv.victim))} will be murdered.</div><p class="muted" style="margin:0">Keep a straight face at breakfast.</p>`;
       } else if (tv.phase === "nominate"){
-        html = mine && mine.noms && mine.noms.length
-          ? `<span class="kicker">The Turret · Night ${tv.round}</span><h3>Your picks are in</h3><p style="margin:0">You put ${namesList(mine.noms)} on the shortlist. Waiting for the other Traitors (${pr.nominated} of ${pr.total}).</p>`
-          : `<span class="kicker">The Turret · Night ${tv.round}</span><h3>${tv.mode === "recruit" ? "Recruitment night" : "Choose who to shortlist"}</h3><p style="margin:0">${tv.mode === "recruit" ? "Your numbers are low. Pick 1 or 2 Faithful you'd like to recruit as a Traitor." : "Pick 1 or 2 Faithful to put on the shortlist for murder."}</p>
-            <div class="choices">${tv.candidates.map(id => choiceBtn(id, turretSel, "data-tsel")).join("")}</div>
-            <div class="acts"><button class="btn solid" type="button" data-turret="submit-noms" ${turretSel.length && !turretSaving ? "" : "disabled"}>${turretSaving ? "Sending…" : `Shortlist ${turretSel.length || ""} player${turretSel.length === 1 ? "" : "s"}`}</button></div>`;
+        const kick = `<span class="kicker">The Turret · Night ${tv.round}${tv.mode === "recruit" ? " · Recruitment" : ""}</span>`;
+        const target = tv.mode === "recruit" ? "recruit" : "victim";
+        const chooserName = tv.chooser ? escapeHtml(nameOf(tv.chooser)) : "";
+        const lo = tv.nomMin || 1, hi = tv.nomMax || 2, avail = availableFor(tv), need = Math.min(lo, avail.length);
+        const howMany = lo === hi ? `${lo}` : `${lo} or ${hi}`;
+        if (tv.chooser === myId()){
+          html = `${kick}<h3>Tonight, you choose</h3><p style="margin:0">The other Traitors are building a shortlist. You'll pick the ${target} from it. (${pr.nominated} of ${pr.nomTotal} shortlists in.)</p>`;
+        } else if (mine && mine.noms && mine.noms.length){
+          html = `${kick}<h3>Your picks are in</h3><p style="margin:0">You put ${namesList(mine.noms)} on the shortlist. <b>${chooserName}</b> will choose the ${target}${pr.nomTotal > 1 ? ` once every shortlist is in (${pr.nominated} of ${pr.nomTotal})` : ""}.</p>`;
+        } else {
+          const okCount = turretSel.length >= need && turretSel.length <= hi && turretSel.length > 0;
+          html = `${kick}<h3>${tv.mode === "recruit" ? "Who could join you?" : "Build the shortlist"}</h3><p style="margin:0">Pick ${howMany} Faithful for the shortlist. <b>${chooserName}</b> will choose tonight's ${target} from it.${(tv.taken || []).length ? " Players already on the shortlist are greyed out." : ""}</p>
+            <div class="choices">${tv.candidates.map(id => avail.includes(id) ? choiceBtn(id, turretSel, "data-tsel") : `<button class="choice" type="button" disabled aria-pressed="false">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))} · on the list</span></button>`).join("")}</div>
+            <div class="acts"><button class="btn solid" type="button" data-turret="submit-noms" ${okCount && !turretSaving ? "" : "disabled"}>${turretSaving ? "Sending…" : okCount ? `Shortlist ${turretSel.length} player${turretSel.length === 1 ? "" : "s"}` : `Choose ${howMany}`}</button></div>`;
+        }
+      } else if (tv.phase === "vote" && tv.chooser){
+        const kick = `<span class="kicker">The Turret · Night ${tv.round}${tv.mode === "recruit" ? " · Recruitment" : ""}</span>`;
+        const target = tv.mode === "recruit" ? "recruit" : "murder";
+        const chosenNow = mine && mine.vote;
+        if (tv.chooser !== myId()){
+          html = `${kick}<h3>${escapeHtml(nameOf(tv.chooser))} is choosing</h3><p style="margin:0">${tv.mode === "chain" ? "The unsafe" : "The shortlist"}: ${namesList(tv.shortlist)}.</p>`;
+        } else if (chosenNow){
+          html = `${kick}<h3>Your choice is in</h3><p style="margin:0">You chose to ${target} <b>${escapeHtml(nameOf(mine.vote))}</b>.</p>`;
+        } else {
+          html = `${kick}<h3>${tv.mode === "recruit" ? "Who will you recruit?" : "Who will you murder?"}</h3><p style="margin:0">It's your turn to choose${tv.mode === "chain" ? " from the unsafe" : (tv.shortlisters || []).length ? " from the shortlist" : ""}.</p>
+            <div class="choices">${tv.shortlist.map(id => choiceBtn(id, turretSel, "data-tvote")).join("")}</div>
+            <div class="acts"><button class="btn solid" type="button" data-turret="submit-vote" ${turretSel.length === 1 && !turretSaving ? "" : "disabled"}>${turretSaving ? "Sending…" : turretSel.length === 1 ? `${tv.mode === "recruit" ? "Recruit" : "Murder"} ${escapeHtml(nameOf(turretSel[0]))}` : "Choose one player"}</button></div>`;
+        }
       } else if (tv.phase === "vote"){
         const votedNow = mine && mine.vote && (mine.attempt || 1) === (tv.attempt || 1);
         const revote = (tv.attempt || 1) > 1;
@@ -2511,7 +2593,7 @@ function renderTurret(force){
       } else if (tv.phase === "tie"){
         html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The vote is tied</h3><p style="margin:0">You're split between ${namesList(tv.tie)}. The host will decide.</p>`;
       } else if (tv.phase === "chosen"){
-        html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The deed is decided</h3>${tv.randomPick ? `<p style="margin:0">You tied again, so fate made the choice.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(tv.victim))} ${tv.mode === "recruit" ? "will be recruited tonight. They join you after breakfast." : "will be murdered tonight."}</div><p class="muted" style="margin:0">Keep a straight face at breakfast.</p>`;
+        html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The deed is decided</h3>${tv.randomPick ? `<p style="margin:0">You tied again, so fate made the choice.</p>` : tv.chooser && tv.chooser !== myId() ? `<p style="margin:0">${escapeHtml(nameOf(tv.chooser))} made the choice.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(tv.victim))} ${tv.mode === "recruit" ? "will be recruited tonight. They join you after breakfast." : "will be murdered tonight."}</div><p class="muted" style="margin:0">Keep a straight face at breakfast.</p>`;
       }
     }
   }
@@ -2529,7 +2611,8 @@ $("turretStage").addEventListener("click", e => {
   const tsel = e.target.closest("[data-tsel]");
   if (tsel){
     const id = tsel.dataset.tsel;
-    turretSel = turretSel.includes(id) ? turretSel.filter(x => x !== id) : turretSel.concat([id]).slice(-2);
+    const lim = (myTurretView() || {}).nomMax || 2;
+    turretSel = turretSel.includes(id) ? turretSel.filter(x => x !== id) : turretSel.concat([id]).slice(-lim);
     renderTurret(true); return;
   }
   const tv = e.target.closest("[data-tvote]");
@@ -3069,8 +3152,9 @@ async function chainToTraitors(){
   const now = Date.now();
   try {
     await recordShortlist(shortlist).catch(()=>{});
+    const chooser = nextChooser(traitors);
     await setTurret({ round: (turretState()?.round || 0) + 1, mode:"chain", phase: shortlist.length === 1 ? "chosen" : "vote", phaseAt: now, attempt: 1,
-      traitors, candidates: shortlist, shortlist, victim: shortlist.length === 1 ? shortlist[0] : null, tie: null });
+      traitors, candidates: shortlist, shortlist, chooser, shortlisters: [], victim: shortlist.length === 1 ? shortlist[0] : null, tie: null });
     toast("The Traitors are choosing among the unsafe");
   } catch(_){ toast("That didn't save. Try again."); }
 }
