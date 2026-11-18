@@ -669,6 +669,7 @@ function startSubs(){
   db.doc("game/announce").onSnapshot(s => { liveAnnounce = s.exists ? s.data() : null; renderAnnounce(); }, ()=>{});
   db.doc("game/break").onSnapshot(s => { liveBreak = s.exists ? s.data() : null; renderBreak(); }, ()=>{});
   db.doc("settings/screen").onSnapshot(s => { screenSetting = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+  db.doc("settings/party").onSnapshot(s => { partySetting = s.exists ? s.data() : null; renderWall(); }, ()=>{});
   db.doc("settings/ghost").onSnapshot(s => { ghostSetting = s.exists ? s.data() : null; renderWall(); }, ()=>{});
   db.doc("game/ghosts").onSnapshot(s => { liveGhostBoard = s.exists ? s.data() : null; renderWall(); }, ()=>{});
   db.doc("settings/host").onSnapshot(s => { liveHostCard = s.exists ? s.data() : null; renderWall(); paintHostThumb(); }, ()=>{});
@@ -770,8 +771,8 @@ async function startGame(){
   const order = shuffle(ids.slice());
   const assign = {}; order.forEach((id, i) => assign[id] = i < t ? "traitor" : "faithful");
   if (isTrial()){
-    const gs = !!trialGame.ghostSetting, ss = trialGame.screenSetting !== false;
-    trialGame = { started:true, traitors:t, players:n, roles:assign, ghostSetting: gs, ghostMode: gs, screenSetting: ss, noScreen: !ss }; trialStatus = {}; trialVotes = {}; trialPicks = {};
+    const gs = !!trialGame.ghostSetting, ss = trialGame.screenSetting !== false, ps = !!trialGame.partySetting;
+    trialGame = { started:true, traitors:t, players:n, roles:assign, ghostSetting: gs, ghostMode: gs, screenSetting: ss, noScreen: !ss, partySetting: ps, smallParty: ps && n <= SMALL_PARTY_MAX }; trialStatus = {}; trialVotes = {}; trialPicks = {};
     trialGame.stats = { startRoles: assign, events: [] };
     saveTrial(); revealed = false; renderWall(); toast("The game has begun"); return;
   }
@@ -785,7 +786,7 @@ async function startGame(){
     await db.doc("game/vote").delete().catch(()=>{});
     await clearNightData();
     await recordStartRoles(assign).catch(()=>{});
-    await db.doc("game/state").set({ started:true, startedAt:Date.now(), traitors:t, players:n, ghostMode: !!(ghostSetting && ghostSetting.on), noScreen: !!(screenSetting && screenSetting.on === false) });
+    await db.doc("game/state").set({ started:true, startedAt:Date.now(), traitors:t, players:n, ghostMode: !!(ghostSetting && ghostSetting.on), noScreen: !!(screenSetting && screenSetting.on === false), smallParty: !!(partySetting && partySetting.on) && n <= SMALL_PARTY_MAX });
     toast("The game has begun");
   } catch(_){ toast("The game couldn't start. Check your connection and try again."); renderWall(); }
 }
@@ -814,7 +815,7 @@ async function clearNightData(){
 }
 async function endGame(){
   gbConfirm = null;
-  if (isTrial()){ trialGame = { started:false, roles:{}, ghostSetting: !!trialGame.ghostSetting, screenSetting: trialGame.screenSetting !== false }; trialStatus = {}; trialVotes = {}; saveTrial(); renderWall(); toast("Back to the lobby"); return; }
+  if (isTrial()){ trialGame = { started:false, roles:{}, ghostSetting: !!trialGame.ghostSetting, screenSetting: trialGame.screenSetting !== false, partySetting: !!trialGame.partySetting }; trialStatus = {}; trialVotes = {}; saveTrial(); renderWall(); toast("Back to the lobby"); return; }
   try {
     await db.doc("game/state").set({ started:false });
     await db.doc("game/vote").delete().catch(()=>{});
@@ -860,11 +861,11 @@ function renderGameBar(){
     bar.innerHTML = `<div class="lead"><span class="kicker">Before the game</span><span class="big">The doors are open</span><span class="muted">${msg} Late arrivals can't join once the game starts.</span></div>
       <div class="acts">${gbConfirm === "start"
         ? `<span>Deal the roles now?</span><button class="btn solid" data-act="start-yes">Yes, start</button><button class="link" data-act="cancel">Cancel</button>`
-        : `<button class="btn small" data-act="announce">Announcement</button><button class="btn small" data-act="screen-toggle" aria-pressed="${screenOn()}">Community screen: ${screenOn() ? "On" : "Off"}</button><button class="btn small ghost-btn" data-act="ghost-toggle" aria-pressed="${ghostModeOn()}">Ghost mode: ${ghostModeOn() ? "On" : "Off"}</button><button class="btn solid" data-act="start" ${t ? "" : "disabled"}>Start game</button>`}</div>`;
+        : `<button class="btn small" data-act="announce">Announcement</button><button class="btn small" data-act="screen-toggle" aria-pressed="${screenOn()}">Community screen: ${screenOn() ? "On" : "Off"}</button><button class="btn small ghost-btn" data-act="ghost-toggle" aria-pressed="${ghostModeOn()}">Ghost mode: ${ghostModeOn() ? "On" : "Off"}</button>${allPlayers().length <= SMALL_PARTY_MAX ? `<button class="btn small" data-act="party-toggle" aria-pressed="${smallParty()}" title="No double banishment, no murder in plain sight, no Dagger. The Safety Chain leaves 3 unsafe.">Small party: ${smallParty() ? "On" : "Off"}</button>` : ""}<button class="btn solid" data-act="start" ${t ? "" : "disabled"}>Start game</button>`}</div>`;
   } else if (host){
     const tr = Object.values(roleMap()).filter(r => r === "traitor").length;
     bar.innerHTML = `<div class="lead"><span class="kicker">Game in progress</span><span class="big">${tr} Traitors walk among ${g.players || n}</span><span class="muted">Roles show under each portrait. Hide them before you put this screen where players can see it.</span></div>
-      <div class="acts">${voteBusy() || turretOrMurderBusy() || fireLive(fireState()) ? "" : `<button class="btn solid" data-act="vote" ${livingIds().length >= 3 ? "" : "disabled"}>Start vote</button>${doubleUsed() ? "" : `<button class="btn small danger" data-act="double" ${livingIds().length >= 4 ? "" : "disabled"}>Double banishment</button>`}<button class="btn danger" data-act="turret">Turret</button>${ghostModeOn() && !ghostMeta().voteUsed ? `<button class="btn small ghost-btn" data-act="ghost-vote" ${ghostIds().length && livingIds().length >= 3 ? "" : "disabled"}>Ghost vote</button>` : ""}<button class="btn small danger" data-act="special" aria-pressed="${specialOpen}">Special murders</button>${livingIds().length <= 5 ? `<button class="btn fire-btn" data-act="firepit">${livingIds().length <= 2 ? "Final reveal" : "Fire Pit"}</button>` : ""}`}<button class="btn small" data-act="announce">Announcement</button><button class="btn small" data-act="powers" aria-pressed="${powersOpen}">Powers</button><button class="btn small" data-act="toggle-roles" aria-pressed="${hideRoles}">${hideRoles ? "Show roles" : "Hide roles"}</button>${gbConfirm === "end"
+      <div class="acts">${voteBusy() || turretOrMurderBusy() || fireLive(fireState()) ? "" : `<button class="btn solid" data-act="vote" ${livingIds().length >= 3 ? "" : "disabled"}>Start vote</button>${doubleUsed() || smallParty() ? "" : `<button class="btn small danger" data-act="double" ${livingIds().length >= 4 ? "" : "disabled"}>Double banishment</button>`}<button class="btn danger" data-act="turret">Turret</button>${ghostModeOn() && !ghostMeta().voteUsed ? `<button class="btn small ghost-btn" data-act="ghost-vote" ${ghostIds().length && livingIds().length >= 3 ? "" : "disabled"}>Ghost vote</button>` : ""}<button class="btn small danger" data-act="special" aria-pressed="${specialOpen}">Special murders</button>${livingIds().length <= 5 ? `<button class="btn fire-btn" data-act="firepit">${livingIds().length <= 2 ? "Final reveal" : "Fire Pit"}</button>` : ""}`}<button class="btn small" data-act="announce">Announcement</button><button class="btn small" data-act="powers" aria-pressed="${powersOpen}">Powers</button><button class="btn small" data-act="toggle-roles" aria-pressed="${hideRoles}">${hideRoles ? "Show roles" : "Hide roles"}</button>${gbConfirm === "end"
         ? `<span>End the game and clear all roles?</span><button class="btn small danger" data-act="end-yes">Yes, end</button><button class="link" data-act="cancel">Cancel</button>`
         : `<button class="btn small danger" data-act="end">End game</button>`}</div>`;
   } else if (!g.started){
@@ -901,6 +902,7 @@ $("gameBar").addEventListener("click", e => {
   else if (a === "announce"){ $("announceComposer").hidden = false; $("announceText").value = (announceState() || {}).active ? announceState().text : ""; $("announceText").focus(); }
   else if (a === "screen-toggle") setScreenSetting(!screenOn()).catch(()=> toast("That didn't save. Try again."));
   else if (a === "ghost-toggle") setGhostSetting(!ghostModeOn()).catch(()=> toast("That didn't save. Try again."));
+  else if (a === "party-toggle"){ const on = !smallParty(); setPartySetting(on).then(() => toast(on ? "Small party mode: no double banishment, no murder in plain sight, no Dagger, and the Safety Chain leaves 3 unsafe" : "Small party mode is off")).catch(()=> toast("That didn't save. Try again.")); }
   else if (a === "ghost-vote") startGhostVote();
   else if (a === "plain"){ plainSetup = true; plainSel = null; renderWall(); }
   else if (a === "special"){ specialOpen = !specialOpen; chainSetup = false; plainSetup = false; renderWall(); }
@@ -1406,7 +1408,7 @@ function myVoteTarget(v){
   return myLiveVote && myLiveVote.round === v.round ? myLiveVote.target : null;
 }
 let daggerOn = false, trialDaggerVote = false;
-const canUseDagger = v => !!v && !v.endgame && myHasDagger();
+const canUseDagger = v => !!v && !v.endgame && !smallParty() && myHasDagger();
 function myVoteDagger(v){
   if (isTrial()) return !!trialVotes[TRIAL_ME] && trialDaggerVote;
   return !!(myLiveVote && myLiveVote.round === v.round && myLiveVote.dagger);
@@ -1449,7 +1451,7 @@ async function lockVotes(v){
     if (!allowed.includes(t) || t === voter) t = null;
     targets[voter] = t;
     // The dagger only counts for a real holder, with a real vote, outside the Fire Pit.
-    if (t && d && !v.endgame && hasDagger(voter)) daggers[voter] = true;
+    if (t && d && !v.endgame && !smallParty() && hasDagger(voter)) daggers[voter] = true;
   });
   if (v.ghostVote){ const gt = ghostVotePick(v); if (gt) targets[GHOSTS_ID] = gt; }
   lockedVotes = { round: v.round, targets, daggers, ghostBets: ghostModeOn() ? snapshotBets("v" + v.round) : {} };
@@ -1535,7 +1537,7 @@ async function showCurrent(v, locked){
 let hostDouble = null;
 const doubleUsed = () => isTrial() ? !!trialGame.doubleUsed : !!(hostDouble && hostDouble.used);
 async function startDouble(){
-  if (doubleUsed() || voteBusy()) return;
+  if (doubleUsed() || voteBusy() || smallParty()) return;
   if (livingIds().length < 4){ toast("A double banishment needs at least 4 players still in the game"); return; }
   try {
     if (isTrial()){ trialGame.doubleUsed = true; saveTrial(); }
@@ -2677,7 +2679,7 @@ function renderPowers(force){
   if (!(isHostView() && powersOpen && gameState().started)){ stage.hidden = true; powersKey = ""; return; }
   stage.hidden = false;
   const living = livingIds(), P = powersMap();
-  const key = JSON.stringify([living, P, ghostModeOn(), ghostMeta(), ghostIds()]);
+  const key = JSON.stringify([living, P, ghostModeOn(), ghostMeta(), ghostIds(), smallParty()]);
   if (key === powersKey && !force) return;
   powersKey = key;
   const holders = living.filter(hasShield);
@@ -2685,10 +2687,10 @@ function renderPowers(force){
     <p style="margin:0;max-width:60ch;margin-inline:auto">A shielded player can't be murdered. If the Traitors pick them, nobody dies that night. Only the holder is told they have it, and it lasts until the end of the next breakfast.</p>
     <p class="muted" style="margin:0">${holders.length ? `Shielded now: ${namesList(holders)}.` : "Nobody holds a shield."} Tap a player to give or take away a shield.</p>
     <div class="choices">${living.map(id => `<button class="choice" type="button" data-shield="${escapeHtml(id)}" aria-pressed="${hasShield(id)}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}${hasShield(id) ? " · shielded" : ""}</span></button>`).join("")}</div>
-    <h3 style="margin-top:12px">The Dagger</h3>
+    ${smallParty() ? "" : `<h3 style="margin-top:12px">The Dagger</h3>
     <p style="margin:0;max-width:60ch;margin-inline:auto">The holder can make their vote count twice in one banishment vote of their choice. It's used up once drawn, can't be used in murder votes or the Fire Pit, and expires after ${DAGGER_VOTES} banishment votes. Only one player can hold it.</p>
     <p class="muted" style="margin:0">${living.filter(hasDagger).length ? `Held by ${namesList(living.filter(hasDagger))} (${DAGGER_VOTES - ((P[living.filter(hasDagger)[0]] || {}).daggerSeen || 0)} votes left).` : "Nobody holds the Dagger."} Tap a player to give or take it.</p>
-    <div class="choices">${living.map(id => `<button class="choice" type="button" data-dagger="${escapeHtml(id)}" aria-pressed="${hasDagger(id)}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}${hasDagger(id) ? " · dagger" : ""}</span></button>`).join("")}</div>
+    <div class="choices">${living.map(id => `<button class="choice" type="button" data-dagger="${escapeHtml(id)}" aria-pressed="${hasDagger(id)}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}${hasDagger(id) ? " · dagger" : ""}</span></button>`).join("")}</div>`}
     ${ghostModeOn() ? `<h3 style="margin-top:12px">Revive</h3>
     <p style="margin:0;max-width:60ch;margin-inline:auto">Bring one eliminated player back into the game. They have a 1 in 6 chance of returning as a Traitor. Only you and they learn which. Once per game.</p>
     ${ghostMeta().reviveUsed
@@ -3001,7 +3003,7 @@ setInterval(() => { fireAutomation(); }, 300);
 /* ---------- Special murders: the Safety Chain ---------- */
 // game/chain is public: who is safe (in order), who is still unsafe, and whose turn it is.
 // Each chooser's pick goes to cpicks/<id>; the host's page applies it to the chain.
-const CHAIN_LEFT = 6, CHAIN_TRIAL_MS = 2000;
+const CHAIN_TRIAL_MS = 2000;
 let liveChain = null, cpicks = {}, myCpick = null, trialCpicks = {};
 let chainKey = "", chainAuto = false, chainSaving = false, chainSel = null, chainSetup = false, chainStarter = null, specialOpen = false;
 const chainState = () => isTrial() ? (trialGame.chain || null) : liveChain;
@@ -3019,7 +3021,7 @@ async function startChain(starter){
   const now = Date.now();
   trialCpicks = {}; chainSetup = false; specialOpen = false; chainStarter = null; chainSel = null;
   try {
-    await putChain({ round: (chainState()?.round || 0) + 1, phase: remaining.length <= CHAIN_LEFT ? "ready" : "chain",
+    await putChain({ round: (chainState()?.round || 0) + 1, phase: remaining.length <= chainLeft() ? "ready" : "chain",
       order: [starter], remaining, current: starter, step: 1, total: remaining.length, promptAt: now });
     toast("The Safety Chain has begun");
   } catch(_){ toast("The Safety Chain couldn't start. Try again."); }
@@ -3028,7 +3030,7 @@ async function applyChainPick(c, pick){
   if (!c.remaining.includes(pick)) return;
   const remaining = c.remaining.filter(id => id !== pick);
   await putChain({ ...c, order: c.order.concat([pick]), remaining, current: pick, step: c.step + 1, promptAt: Date.now(),
-    phase: remaining.length <= CHAIN_LEFT ? "ready" : "chain" });
+    phase: remaining.length <= chainLeft() ? "ready" : "chain" });
 }
 async function submitChainPick(pick){
   const c = chainState(); if (!c || c.phase !== "chain" || c.current !== myId()) return;
@@ -3087,20 +3089,20 @@ function renderChain(force){
   let html = "", key = "";
 
   if (host && started && specialOpen && !chainSetup && !plainSetup && !turretOrMurderBusy() && !voteBusy()){
-    key = ["special", mipsUsed(), chainUsed()].join("|");
+    key = ["special", mipsUsed(), chainUsed(), smallParty()].join("|");
     html = `<span class="kicker">Special murders</span><h3>Choose a special murder</h3>
       <div class="special-grid">
-        <button class="special-opt" type="button" data-chain="pick-plain" ${mipsUsed() ? "disabled" : ""}>
-          <b>Murder in plain sight</b><span>The Traitors must complete a secret task to murder. ${mipsUsed() ? "Already used this game." : "Once per game."}</span></button>
+        ${smallParty() ? "" : `<button class="special-opt" type="button" data-chain="pick-plain" ${mipsUsed() ? "disabled" : ""}>
+          <b>Murder in plain sight</b><span>The Traitors must complete a secret task to murder. ${mipsUsed() ? "Already used this game." : "Once per game."}</span></button>`}
         ${chainUsed() ? "" : `<button class="special-opt" type="button" data-chain="pick-chain">
-          <b>Safety Chain</b><span>Players save each other one by one until ${CHAIN_LEFT} remain unsafe. The Traitors murder one of them. Once per game.</span></button>`}
+          <b>Safety Chain</b><span>Players save each other one by one until ${chainLeft()} remain unsafe. The Traitors murder one of them. Once per game.</span></button>`}
       </div>
       <div class="acts"><button class="link" type="button" data-chain="special-close">Close</button></div>`;
   } else if (host && started && chainSetup && !chainLive()){
     const living = livingIds();
     key = ["chainsetup", chainStarter, living.length].join("|");
     html = `<span class="kicker">Safety Chain</span><h3>Who starts the chain?</h3>
-      <p style="margin:0">The player you choose is safe tonight and picks the next player to save. The chain stops when ${CHAIN_LEFT} players are left unsafe.</p>
+      <p style="margin:0">The player you choose is safe tonight and picks the next player to save. The chain stops when ${chainLeft()} players are left unsafe.</p>
       <div class="choices">${living.map(id => choiceBtn(id, chainStarter ? [chainStarter] : [], "data-chainstart")).join("")}</div>
       <div class="acts"><button class="btn solid" type="button" data-chain="start" ${chainStarter ? "" : "disabled"}>${chainStarter ? `Start the chain with ${escapeHtml(nameOf(chainStarter))}` : "Choose who starts"}</button>
         <button class="link" type="button" data-chain="setup-cancel">Cancel</button></div>`;
@@ -3179,8 +3181,8 @@ function chainPowersHtml(c){
   const daggerHolder = c.remaining.find(id => (P[id] || {}).dagger);
   return `<div class="ghost-block"><b>Give one of the unsafe a shield</b><span class="muted">Secret. If the Traitors pick them tonight, nobody dies. Tap again to take it back.${shieldHolder ? ` Shield: <b>${escapeHtml(nameOf(shieldHolder))}</b>.` : ""}</span>
       <div class="choices">${c.remaining.map(id => chip(id, id === shieldHolder, "data-chainshield")).join("")}</div></div>
-    <div class="ghost-block"><b>Give one of the unsafe the Dagger</b><span class="muted">Secret. Their vote counts twice in one banishment of their choice. Giving it here takes it from anyone else.${daggerHolder ? ` Dagger: <b>${escapeHtml(nameOf(daggerHolder))}</b>.` : ""}</span>
-      <div class="choices">${c.remaining.map(id => chip(id, id === daggerHolder, "data-chaindagger")).join("")}</div></div>`;
+    ${smallParty() ? "" : `<div class="ghost-block"><b>Give one of the unsafe the Dagger</b><span class="muted">Secret. Their vote counts twice in one banishment of their choice. Giving it here takes it from anyone else.${daggerHolder ? ` Dagger: <b>${escapeHtml(nameOf(daggerHolder))}</b>.` : ""}</span>
+      <div class="choices">${c.remaining.map(id => chip(id, id === daggerHolder, "data-chaindagger")).join("")}</div></div>`}`;
 }
 async function chainGiveShield(id){
   const c = chainState(); if (!c) return;
@@ -3233,7 +3235,7 @@ function renderChainWall(wall){
 }
 function chainBanner(){
   const c = chainState();
-  if (c.phase === "chain") return `<div class="lead"><span class="kicker">Safety Chain</span><span class="big">${escapeHtml(nameOf(c.current))} is choosing who to save next</span><span class="muted">${c.remaining.length} players remain unsafe. The chain stops at ${CHAIN_LEFT}.</span></div>`;
+  if (c.phase === "chain") return `<div class="lead"><span class="kicker">Safety Chain</span><span class="big">${escapeHtml(nameOf(c.current))} is choosing who to save next</span><span class="muted">${c.remaining.length} players remain unsafe. The chain stops at ${chainLeft()}.</span></div>`;
   return `<div class="lead"><span class="kicker">Safety Chain</span><span class="big">These ${c.remaining.length} remain unsafe tonight</span><span class="muted">One of them may not survive the night.</span></div>`;
 }
 setInterval(() => { chainAutomation(); }, 300);
@@ -3308,6 +3310,20 @@ $("announceClose").addEventListener("click", async () => {
   try { await putAnnounce({ active: false, text: "", at: Date.now() }); toast("Announcement closed"); }
   catch(_){ toast("That didn't save. Try again."); }
 });
+
+/* ---------- Small party mode ---------- */
+// For 10 players or fewer: no double banishment, no murder in plain sight, no Dagger,
+// and the Safety Chain stops at 3 unsafe instead of 6. Locked in when the game starts.
+const SMALL_PARTY_MAX = 10;
+let partySetting = null;
+const smallParty = () => isTrial()
+  ? !!(gameState().started ? trialGame.smallParty : trialGame.partySetting && allPlayers().length <= SMALL_PARTY_MAX)
+  : !!(game.started ? game.smallParty : partySetting && partySetting.on && allPlayers().length <= SMALL_PARTY_MAX);
+const chainLeft = () => smallParty() ? 3 : 6;
+async function setPartySetting(on){
+  if (isTrial()){ trialGame.partySetting = on; saveTrial(); renderWall(); return; }
+  await db.doc("settings/party").set({ on });
+}
 
 /* ---------- Community screen on/off ---------- */
 // Off: there is no TV screen, so every phone (and the host) shows the reveals itself.
