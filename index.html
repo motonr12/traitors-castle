@@ -225,6 +225,18 @@ html.screen-mode,body.screen-mode{height:100%}
 .role-tag.dagger{border-color:#b08bd0;color:#dcc6ef}
 .dagger-note{border-color:#b08bd0;color:#dcc6ef}
 .reveal-target.dagger-note{font-family:var(--font-display);font-size:clamp(1rem,3vh,1.6rem);letter-spacing:.06em;border:0;padding:0}
+.immunity-note{color:#e7d08a;border-color:#c9a94a}
+.reveal-target.immunity-note{font-family:var(--font-display);font-size:clamp(1rem,3vh,1.6rem);letter-spacing:.06em;border:0;padding:0}
+.immunity-call b{color:#e7d08a}
+@keyframes betrayal-shake{0%,100%{transform:translate(0,0)}10%{transform:translate(-9px,3px) rotate(-.6deg)}20%{transform:translate(8px,-4px) rotate(.6deg)}30%{transform:translate(-7px,5px)}40%{transform:translate(7px,-2px) rotate(-.4deg)}50%{transform:translate(-5px,3px)}60%{transform:translate(5px,-3px)}70%{transform:translate(-3px,2px)}80%{transform:translate(3px,-1px)}90%{transform:translate(-1px,1px)}}
+body.shake .wrap, body.shake #betrayalOverlay .betrayal-card{animation:betrayal-shake .8s cubic-bezier(.36,.07,.19,.97) both}
+@media (prefers-reduced-motion:reduce){body.shake .wrap, body.shake #betrayalOverlay .betrayal-card{animation:none}}
+#betrayalOverlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at center,rgba(90,10,10,.85),rgba(5,3,3,.96))}
+#betrayalOverlay[hidden]{display:none}
+.betrayal-card{max-width:520px;width:100%;border:1px solid #9c2b2b;background:linear-gradient(180deg,#241312,#140b0a);padding:28px 22px;text-align:center;display:flex;flex-direction:column;gap:14px;box-shadow:0 0 60px -10px rgba(180,30,30,.6)}
+.betrayal-card h3{margin:0;font-family:var(--font-display);font-size:clamp(1.6rem,6vw,2.2rem);letter-spacing:.04em;color:#f1d6d0}
+.betrayal-card p{margin:0}
+.betrayal-card .no-murder{color:#e7d08a;font-weight:600}
 .dagger-box{display:flex;flex-direction:column;align-items:center;gap:6px}
 .role-tag.shield{border-color:#7c97b8;color:#b9cde6}
 .fire-stage{border-color:#c4682d;background:radial-gradient(ellipse 90% 80% at 50% 100%,rgba(196,104,45,.25),rgba(15,19,17,0) 70%),var(--stone-2)}
@@ -377,6 +389,16 @@ details.ghost-block > summary:focus-visible{outline:2px solid var(--parchment);o
 </style>
 </head>
 <body>
+  <div id="betrayalOverlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="betrayalTitle">
+    <div class="betrayal-card">
+      <span class="kicker" style="color:#e08a8a">Betrayal</span>
+      <h3 id="betrayalTitle">A warning to the Traitors</h3>
+      <p>If a Traitor is banished at the next banishment, the remaining Traitor will receive a <b>major advantage</b> in the game.</p>
+      <p class="no-murder" id="betrayalNoMurder" hidden>There will be no murder tonight.</p>
+      <p class="muted" style="font-size:.9rem">Keep this to yourself.</p>
+      <div class="acts"><button class="btn solid" type="button" id="betrayalClose">Close</button></div>
+    </div>
+  </div>
 
 <div class="wrap">
   <header class="crest">
@@ -704,6 +726,7 @@ function startSubs(){
     db.doc("host/plan").onSnapshot(s => { murderPlan = s.exists ? s.data() : null; }, ()=>{});
     db.doc("host/fate").onSnapshot(s => { hostFate = s.exists ? s.data() : null; renderVote(true); }, ()=>{});
     db.doc("host/double").onSnapshot(s => { hostDouble = s.exists ? s.data() : null; renderWall(); }, ()=>{});
+    db.doc("host/betrayal").onSnapshot(s => { hostBetrayal = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.doc("host/mips").onSnapshot(s => { hostMips = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.collection("cpicks").onSnapshot(s => { cpicks = {}; s.docs.forEach(d => { if (d.exists) cpicks[d.id] = d.data(); }); }, ()=>{});
     db.collection("ghost").onSnapshot(s => { hostGhosts = {}; s.docs.forEach(d => { if (d.exists) hostGhosts[d.id] = d.data(); }); }, ()=>{});
@@ -773,7 +796,7 @@ async function startGame(){
   const assign = {}; order.forEach((id, i) => assign[id] = i < t ? "traitor" : "faithful");
   if (isTrial()){
     const gs = !!trialGame.ghostSetting, ss = trialGame.screenSetting !== false, ps = !!trialGame.partySetting;
-    trialGame = { started:true, traitors:t, players:n, roles:assign, ghostSetting: gs, ghostMode: gs, screenSetting: ss, noScreen: !ss, partySetting: ps, smallParty: ps && n <= SMALL_PARTY_MAX }; trialStatus = {}; trialVotes = {}; trialPicks = {};
+    trialGame = { started:true, startedAt: Date.now(), traitors:t, players:n, roles:assign, ghostSetting: gs, ghostMode: gs, screenSetting: ss, noScreen: !ss, partySetting: ps, smallParty: ps && n <= SMALL_PARTY_MAX }; trialStatus = {}; trialVotes = {}; trialPicks = {};
     trialGame.stats = { startRoles: assign, events: [] };
     saveTrial(); revealed = false; renderWall(); toast("The game has begun"); return;
   }
@@ -798,6 +821,7 @@ async function clearNightData(){
   await db.doc("host/turret").delete().catch(()=>{});
   await db.doc("host/mips").delete().catch(()=>{});
   await db.doc("host/double").delete().catch(()=>{});
+  await db.doc("host/betrayal").delete().catch(()=>{});
   await db.doc("host/fate").delete().catch(()=>{});
   await db.doc("game/break").delete().catch(()=>{});
   await db.doc("game/plain").delete().catch(()=>{});
@@ -1399,8 +1423,9 @@ async function startVote(opts){
   const revote = !!(opts && opts.candidates);
   if (voters.length < (revote ? 2 : (opts && opts.endgame ? 2 : 3))){ toast("A vote needs at least 3 players still in the game"); return; }
   const now = Date.now();
-  pickTarget = null; trialVotes = {}; trialDaggerVote = false; daggerOn = false; trialRevealReq = false;
-  const extra = { ...(revote ? { candidates: opts.candidates, isRevote: true } : {}), ...(opts && opts.endgame ? { endgame: true } : {}), ...(opts && opts.ghostVote ? { ghostVote: true } : {}), ...(opts && opts.double ? { double: true } : {}) };
+  pickTarget = null; trialVotes = {}; trialDaggerVote = false; daggerOn = false; trialRevealReq = false; trialImmuneVote = false; immuneOn = false;
+  if (!revote) await settleBetrayal().catch(()=>{});
+  const extra = { ...(opts && opts.immuneCarry ? { immuneCarry: opts.immuneCarry } : {}), ...(revote ? { candidates: opts.candidates, isRevote: true } : {}), ...(opts && opts.endgame ? { endgame: true } : {}), ...(opts && opts.ghostVote ? { ghostVote: true } : {}), ...(opts && opts.double ? { double: true } : {}) };
   try { await putVote({ round: (currentVote()?.round || 0) + 1, phase:"open", startedAt: now, endsAt: now + VOTE_MS, voters, ...extra }); toast(revote ? "The revote is open" : opts && opts.double ? "Double banishment: the vote is open" : "The vote is open"); }
   catch(_){ toast("The vote couldn't start. Try again."); }
 }
@@ -1408,7 +1433,13 @@ function myVoteTarget(v){
   if (isTrial()) return trialVotes[TRIAL_ME] || null;
   return myLiveVote && myLiveVote.round === v.round ? myLiveVote.target : null;
 }
-let daggerOn = false, trialDaggerVote = false;
+let daggerOn = false, trialDaggerVote = false, immuneOn = false, trialImmuneVote = false;
+// Immunity (from a Betrayal): the holder can play it in a Round Table banishment (not a double, not the Fire Pit).
+const canUseImmunity = v => !!v && !v.double && !v.endgame && myHasImmunity();
+function myVoteImmune(v){
+  if (isTrial()) return !!trialVotes[TRIAL_ME] && trialImmuneVote;
+  return !!(myLiveVote && myLiveVote.round === v.round && myLiveVote.immune);
+}
 const canUseDagger = v => !!v && !v.endgame && !smallParty() && myHasDagger();
 function myVoteDagger(v){
   if (isTrial()) return !!trialVotes[TRIAL_ME] && trialDaggerVote;
@@ -1416,11 +1447,11 @@ function myVoteDagger(v){
 }
 async function submitVote(target){
   const v = currentVote(); if (!v || v.phase !== "open" || Date.now() > v.endsAt) return;
-  const dagger = daggerOn && canUseDagger(v);
-  const msg = "Vote cast for " + nameOf(target) + (dagger ? ", with the Dagger" : "");
-  if (isTrial()){ trialVotes[TRIAL_ME] = target; trialDaggerVote = dagger; renderVote(true); toast(msg); return; }
+  const dagger = daggerOn && canUseDagger(v), immune = immuneOn && canUseImmunity(v);
+  const msg = "Vote cast for " + nameOf(target) + (dagger ? ", with the Dagger" : "") + (immune ? ". Immunity played" : "");
+  if (isTrial()){ trialVotes[TRIAL_ME] = target; trialDaggerVote = dagger; trialImmuneVote = immune; renderVote(true); toast(msg); return; }
   myVoteSaving = true; renderVote(true);
-  try { await db.doc("votes/"+me).set({ round: v.round, target, dagger, at: Date.now() }); toast(msg); }
+  try { await db.doc("votes/"+me).set({ round: v.round, target, dagger, immune, at: Date.now() }); toast(msg); }
   catch(_){ toast("Your vote didn't go through. Try again."); }
   finally { myVoteSaving = false; renderVote(true); }
 }
@@ -1455,7 +1486,15 @@ async function lockVotes(v){
     if (t && d && !v.endgame && !smallParty() && hasDagger(voter)) daggers[voter] = true;
   });
   if (v.ghostVote){ const gt = ghostVotePick(v); if (gt) targets[GHOSTS_ID] = gt; }
-  lockedVotes = { round: v.round, targets, daggers, ghostBets: ghostModeOn() ? snapshotBets("v" + v.round) : {} };
+  // Immunity: only a real holder who is voting, and never in a double banishment.
+  let immune = null;
+  const holder = v.double || v.endgame ? null : v.voters.find(id => hasImmunity(id));
+  if (holder){
+    const used = isTrial() ? (holder === TRIAL_ME ? trialImmuneVote : Math.random() < 0.5)
+      : !!(liveVotes[holder] && liveVotes[holder].round === v.round && liveVotes[holder].immune);
+    if (used) immune = holder;
+  }
+  lockedVotes = { round: v.round, targets, daggers, immune, ghostBets: ghostModeOn() ? snapshotBets("v" + v.round) : {} };
   if (isTrial()) trialGame.locked = lockedVotes;
   else await db.doc("votes/_locked").set(lockedVotes);
 }
@@ -1469,7 +1508,12 @@ async function closeVote(v){
   await lockVotes(v);
   trialRevealReq = false;
   const L = getLocked(v) || {}, D = getLockedDaggers(v) || {};
-  const order = suspenseOrder(v.voters, L, D);
+  const immune = (isTrial() ? (trialGame.locked || {}).immune : (lockedVotes || {}).immune) || null;
+  if (immune){
+    const P = powersMap();
+    await setPower(immune, { ...(P[immune] || {}), immunity: false, immunityUsed: v.round });
+  }
+  const order = suspenseOrder(v.voters, L, D, immune);
   if (v.ghostVote && L[GHOSTS_ID]) order.push(GHOSTS_ID); // the ghosts speak last
   // The whole reveal fits in about a minute: each vote gets an equal slice of the time,
   // split between calling the name and showing the vote. Dagger votes get a little extra.
@@ -1477,15 +1521,18 @@ async function closeVote(v){
   const extra = Math.min(DAGGER_EXTRA_MS, 3000);
   const slot = Math.max(2500, Math.min(7500, (REVEAL_TOTAL_MS - daggers * extra - order.length * 250) / Math.max(1, order.length)));
   const callMs = Math.max(900, Math.round(slot * 0.35)), showMs = Math.round(slot - callMs);
-  await putVote({ ...v, phase:"reveal", order, step: 0, promptAt: Date.now(), shownAt: null, revealed: [], callMs, showMs, daggerMs: extra, daggerCall: daggerCallFor(v, order[0]) });
+  // Immunity is announced before the first vote is read.
+  const startAt = Date.now() + (immune ? IMMUNITY_MS : 0);
+  await putVote({ ...v, phase:"reveal", order, step: 0, promptAt: startAt, shownAt: null, revealed: [], callMs, showMs, daggerMs: extra, daggerCall: daggerCallFor(v, order[0]), immune, immuneUntil: immune ? startAt : null });
 }
 // Reveal order, Survivor style: anyone who didn't vote goes first, then the votes are read
 // so the tallies stay as level as possible. Whoever is trailing gets the next vote, smaller
 // piles go before bigger ones, and the player being banished is clinched on the last vote.
-function suspenseOrder(voters, L, D){
-  const blank = shuffle(voters.filter(id => !L[id]));
+function suspenseOrder(voters, L, D, immune){
+  // Votes that don't count (no vote, or a vote against an Immunity holder) go first.
+  const blank = shuffle(voters.filter(id => !L[id])).concat(shuffle(voters.filter(id => L[id] && L[id] === immune)));
   const piles = {}, total = {}, tally = {};
-  shuffle(voters.filter(id => L[id])).forEach(id => {
+  shuffle(voters.filter(id => L[id] && L[id] !== immune)).forEach(id => {
     const t = L[id], w = D[id] ? 2 : 1;
     (piles[t] = piles[t] || []).push(id); total[t] = (total[t] || 0) + w; tally[t] = 0;
   });
@@ -1501,6 +1548,7 @@ function suspenseOrder(voters, L, D){
   return blank.concat(out);
 }
 // The reveal runs on its own: each voter's name is called, and after a short pause their vote appears.
+const IMMUNITY_MS = 9000;
 const CALL_MS = 2500, REVEAL_TOTAL_MS = 60000, GHOST_SUSPENSE_MS = 3500, GHOST_HOLD_MS = 9000;
 async function revealGhostVote(){
   const v = currentVote(); if (!v || v.phase !== "reveal" || v.order[v.step] !== GHOSTS_ID || v.ghostGo) return;
@@ -1528,7 +1576,7 @@ function getLockedDaggers(v){
 }
 async function showCurrent(v, locked){
   const voter = v.order[v.step];
-  const weight = locked[voter] && getLockedDaggers(v)[voter] ? 2 : 1;
+  const weight = locked[voter] && v.immune && locked[voter] === v.immune ? 0 : locked[voter] && getLockedDaggers(v)[voter] ? 2 : 1;
   const revealed = v.revealed.concat([{ voter, target: locked[voter] || null, weight }]);
   await putVote({ ...v, revealed, shownAt: Date.now() });
 }
@@ -1556,6 +1604,7 @@ async function finishDeadlock(v, chosen, how){
   const result = { ...out, [how]: true, safe: o.ids.filter(id => !chosen.includes(id)), wasDeadlock: true };
   await putVote({ ...v, outcome: result });
   for (const id of chosen) await setStatus(id, "banished", { hideRole:true });
+  await betrayalBanished(chosen).catch(()=>{});
   await bumpStats(s => { if (how === "unanimous") result.safe.forEach(id => add(s.closeCalls, id)); else o.ids.forEach(id => add(s.closeCalls, id)); }).catch(()=>{});
   if (how === "unanimous"){
     const L = isTrial() ? trialGame.locked : (lockedVotes && lockedVotes.round === v.round ? lockedVotes : liveVotes["_locked"]);
@@ -1570,7 +1619,7 @@ async function unanimousDecision(){
 async function notUnanimous(){
   const v = currentVote(), o = v && v.outcome; if (!o || o.type !== "deadlock" || o.fatePending) return;
   // The tied players are safe; fate picks from everyone else still in the game.
-  const pool = livingIds().filter(id => !o.ids.includes(id));
+  const pool = livingIds().filter(id => !o.ids.includes(id) && id !== (v.immune || v.immuneCarry));
   const from = pool.length >= o.need ? pool : livingIds();
   const picks = shuffle(from.slice()).slice(0, o.need);
   try {
@@ -1605,7 +1654,7 @@ function doubleOutcome(counts, v){
   return { type:"tie", ids: g2, votes: max2, need: 1, banishedFirst: first, firstVotes: max1 };
 }
 async function finishVote(v){
-  const counts = {}; v.revealed.forEach(r => { if (r.target) counts[r.target] = (counts[r.target] || 0) + (r.weight || 1); });
+  const counts = {}; v.revealed.forEach(r => { if (r.target && voteWeight(r) > 0) counts[r.target] = (counts[r.target] || 0) + voteWeight(r); });
   if (v.double){
     const outcome = doubleOutcome(counts, v);
     await putVote({ ...v, phase:"done", counts, outcome, doneAt: Date.now() });
@@ -1613,6 +1662,7 @@ async function finishVote(v){
     const out = outcome.type === "double" ? outcome.ids : outcome.type === "banish" ? [outcome.id] : outcome.banishedFirst ? [outcome.banishedFirst] : [];
     // (a deadlock's remaining places are settled by the host afterwards)
     for (const id of out) await setStatus(id, "banished", { hideRole:true });
+    if (out.length) await betrayalBanished(out).catch(()=>{});
     if (!outcome.random){
       const L = isTrial() ? trialGame.locked : (lockedVotes && lockedVotes.round === v.round ? lockedVotes : liveVotes["_locked"]);
       if (L && L.round === v.round) for (const id of out) await scoreBets(L.ghostBets, id, "Banishment");
@@ -1630,7 +1680,7 @@ async function finishVote(v){
   }
   await putVote({ ...v, phase:"done", counts, outcome, doneAt: Date.now() });
   await recordVoteStats(v, outcome).catch(()=>{});
-  if (outcome.type === "banish") await setStatus(outcome.id, "banished", { hideRole:true });
+  if (outcome.type === "banish"){ await setStatus(outcome.id, "banished", { hideRole:true }); await betrayalBanished([outcome.id]).catch(()=>{}); }
   if (outcome.type === "banish" && !outcome.random){
     const L = isTrial() ? trialGame.locked : (lockedVotes && lockedVotes.round === v.round ? lockedVotes : liveVotes["_locked"]);
     if (L && L.round === v.round) await scoreBets(L.ghostBets, outcome.id, "Banishment");
@@ -1660,6 +1710,7 @@ async function hostAutomation(){
       const locked = getLocked(v);
       if (!locked){ await lockVotes(v); }
       else if (v.step >= v.order.length){ await finishVote(v); }
+      else if (!v.shownAt && v.immuneUntil && now < v.immuneUntil){ /* Immunity is being announced */ }
       else if (!v.shownAt){
         const voter = v.order[v.step];
         // A player who didn't vote is announced straight away; otherwise wait for their tap.
@@ -1681,7 +1732,7 @@ async function forceReveal(){
 }
 async function decideTie(id){
   const v = currentVote(); if (!v) return;
-  try { await setStatus(id, "banished", { hideRole:true }); await putVote({ ...v, outcome:{ type:"banish", id, votes: v.outcome.votes, decided:true }, doneAt: Date.now() }); }
+  try { await setStatus(id, "banished", { hideRole:true }); await betrayalBanished([id]).catch(()=>{}); await putVote({ ...v, outcome:{ type:"banish", id, votes: v.outcome.votes, decided:true }, doneAt: Date.now() }); }
   catch(_){ toast("That banishment didn't save. Try again."); }
 }
 
@@ -1693,8 +1744,9 @@ function bigPortrait(id, extra){
   const ph = photoOf(id);
   return `<div class="portrait stage-portrait ${extra || ""}"><div class="canvas">${ph ? `<img alt="" src="${ph}">` : `<span class="initials">${escapeHtml(initials(nameOf(id)))}</span>`}<div class="vignette"></div></div></div>`;
 }
+const voteWeight = r => r.weight == null ? 1 : r.weight;
 function talliesHtml(revealed){
-  const counts = {}; revealed.forEach(r => { if (r.target) counts[r.target] = (counts[r.target] || 0) + (r.weight || 1); });
+  const counts = {}; revealed.forEach(r => { if (r.target && voteWeight(r) > 0) counts[r.target] = (counts[r.target] || 0) + voteWeight(r); });
   const rows = Object.entries(counts).sort((a,b) => b[1]-a[1]);
   return rows.length ? `<div class="tallies">${rows.map(([id, c]) => `<span>${escapeHtml(nameOf(id))} · ${c}</span>`).join("")}</div>` : "";
 }
@@ -1705,6 +1757,10 @@ function roleLine(v, id, showRole){
   return r ? `<div class="verdict role-${r}">${name} was… ${r === "traitor" ? "a Traitor" : "Faithful"}.</div>` : `<p class="muted" style="margin:0">${name}, before you leave the castle, the host will reveal your role.</p>`;
 }
 function verdictHtml(v, showRole){
+  const imm = v.immune ? `<p class="immunity-note" style="margin:0">${escapeHtml(nameOf(v.immune))} played Immunity. Votes against them did not count.</p>` : "";
+  return imm + verdictCore(v, showRole);
+}
+function verdictCore(v, showRole){
   const o = v.outcome;
   if (o.type === "none") return `<div class="verdict">No votes were cast. Nobody is banished.</div>`;
   if (o.type === "deadlock"){
@@ -1774,7 +1830,7 @@ function renderVote(force){
   const now = Date.now();
   const myId_ = myId();
   const kick = `<span class="kicker">Round Table · Vote ${v.round}${v.double ? " · Double banishment" : ""}</span>`;
-  if (v.round !== pickRound){ pickRound = v.round; pickTarget = null; daggerOn = false; }
+  if (v.round !== pickRound){ pickRound = v.round; pickTarget = null; daggerOn = false; immuneOn = false; }
 
   /* ----- voting ----- */
   if (v.phase === "open"){
@@ -1782,7 +1838,8 @@ function renderVote(force){
     const canVote = player && v.voters.includes(myId_);
     const mine = myVoteTarget(v);
     const mineDagger = myVoteDagger(v), daggerAvail = canVote && canUseDagger(v);
-    const key = ["open", v.round, left > 0, mine, mineDagger, daggerOn, daggerAvail, pickTarget, myVoteSaving, host ? votesIn(v) : "", canVote, screen].join("|");
+    const mineImmune = myVoteImmune(v), immuneAvail = canVote && canUseImmunity(v);
+    const key = ["open", v.round, left > 0, mine, mineDagger, daggerOn, daggerAvail, mineImmune, immuneOn, immuneAvail, pickTarget, myVoteSaving, host ? votesIn(v) : "", canVote, screen].join("|");
     if (key !== stageKey || force){
       stageKey = key;
       let body = "";
@@ -1799,11 +1856,12 @@ function renderVote(force){
           : "You're no longer in the game, so you can watch but not vote."}</p>`;
       } else {
         const sel = pickTarget || mine;
-        body = `<p style="margin:0">${mine ? `Your vote for <b>${escapeHtml(nameOf(mine))}</b>${mineDagger ? " (with the Dagger)" : ""} is in. You can change it until time runs out.` : (v.isRevote ? `It's a revote. Choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}.` : (v.double ? "Double banishment: the two players with the most votes will both be banished. Choose one player." : "Who do you think is a Traitor? Choose one player."))}</p>
+        body = `<p style="margin:0">${mine ? `Your vote for <b>${escapeHtml(nameOf(mine))}</b>${mineDagger ? " (with the Dagger)" : ""}${mineImmune ? " (Immunity played)" : ""} is in. You can change it until time runs out.` : (v.isRevote ? `It's a revote. Choose between ${(v.candidates || []).map(id => escapeHtml(nameOf(id))).join(" and ")}.` : (v.double ? "Double banishment: the two players with the most votes will both be banished. Choose one player." : "Who do you think is a Traitor? Choose one player."))}</p>
           <div class="choices">${(v.candidates || v.voters).filter(id => id !== myId_).map(id =>
             `<button class="choice" type="button" data-pick="${escapeHtml(id)}" aria-pressed="${sel === id}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}</span></button>`).join("")}</div>
           ${daggerAvail ? `<div class="dagger-box"><button class="btn small ${daggerOn ? "solid" : ""}" type="button" data-vote="dagger" aria-pressed="${daggerOn}">${daggerOn ? "Dagger drawn: your vote counts twice" : "Use the Dagger on this vote"}</button><span class="muted">You can only use it once. Everyone will see it at the reveal.</span></div>` : ""}
-          <div class="acts"><button class="btn solid" type="button" data-vote="submit" ${(sel && (sel !== mine || (daggerAvail && daggerOn !== mineDagger))) && !myVoteSaving ? "" : "disabled"}>${myVoteSaving ? "Sending…" : mine ? "Change my vote" : "Submit vote"}</button></div>`;
+          ${immuneAvail ? `<div class="dagger-box"><button class="btn small ${immuneOn ? "solid" : ""}" type="button" data-vote="immune" aria-pressed="${immuneOn}">${immuneOn ? "Immunity played: votes against you won't count" : "Play my Immunity on this vote"}</button><span class="muted">One use only. If you play it, every vote against you is cancelled and the player with the next most votes is banished. It will be announced before the votes are read.</span></div>` : ""}
+          <div class="acts"><button class="btn solid" type="button" data-vote="submit" ${(sel && (sel !== mine || (daggerAvail && daggerOn !== mineDagger) || (immuneAvail && immuneOn !== mineImmune))) && !myVoteSaving ? "" : "disabled"}>${myVoteSaving ? "Sending…" : mine ? "Change my vote" : "Submit vote"}</button></div>`;
       }
       stage.innerHTML = `${kick}<h3>${v.isRevote ? "Revote" : "Cast your vote"}</h3><div class="clock" id="voteClock"></div>${body}`;
     }
@@ -1824,9 +1882,23 @@ function renderVote(force){
     const waitingTap = isTrial() ? trialRevealReq : !!(myLiveVote && myLiveVote.round === v.round && myLiveVote.revealed);
     const ghostStage = voter === GHOSTS_ID ? (shown ? "shown" : v.ghostGo ? "rising" : "waiting") : "";
     const daggerTurn = !shown && v.daggerCall === voter;
-    const key = ["rev", v.round, step, shown, isMe, meDone, myVoteSaving, waitingTap, host, screen, player, ghostStage, daggerTurn].join("|");
+    const immuneCall = !!v.immune && !v.shownAt && v.step === 0 && now < (v.immuneUntil || 0);
+    const key = ["rev", v.round, step, shown, isMe, meDone, myVoteSaving, waitingTap, host, screen, player, ghostStage, daggerTurn, immuneCall].join("|");
     if (key === stageKey && !force) return;
     stageKey = key;
+    if (immuneCall){
+      const nm = escapeHtml(nameOf(v.immune));
+      if (player && !host && !screen && screenOn()){
+        stage.innerHTML = `${kick}<span class="kicker" style="color:#e7d08a">Immunity</span><h3>${v.immune === myId_ ? "You played your Immunity" : `${nm} has played Immunity`}</h3><p class="muted" style="margin:0">Every vote against ${v.immune === myId_ ? "you" : nm} will not count. Watch the community screen.</p>`;
+      } else {
+        stage.innerHTML = `${kick}<div class="reveal-row">${bigPortrait(v.immune)}<div class="reveal-text">
+          <div class="reveal-sub immunity-call">${nm} has a secret power: <b>Immunity</b>.</div>
+          <div class="reveal-target immunity-note">${nm} has chosen to use it. Any votes cast against ${nm} will not count.</div>
+          <div class="reveal-sub muted" style="font-size:clamp(.9rem,2.2vh,1.15rem)">The player with the next most votes will be banished.</div></div></div>`;
+      }
+      fitNames(stage);
+      return;
+    }
     const progress = `<p class="muted step-count">Vote ${step + 1} of ${total}</p>`;
 
     if (player && !host && !screen && screenOn()){
@@ -1879,6 +1951,7 @@ function renderVote(force){
           <div class="reveal-sub">${voter === GHOSTS_ID ? "The ghosts have spoken. They vote for…" : `${escapeHtml(nameOf(voter))} has voted for…`}</div>
           <div class="reveal-target"><span class="reveal-call">${escapeHtml(nameOf(cur.target))}</span></div>
           ${cur.weight === 2 ? `<div class="reveal-target dagger-note">${escapeHtml(nameOf(voter))} drew the Dagger. This vote counts twice.</div>` : ""}
+          ${cur.weight === 0 ? `<div class="reveal-target immunity-note">${escapeHtml(nameOf(cur.target))} played Immunity. This vote does not count.</div>` : ""}
         </div><div class="reveal-target">${bigPortrait(cur.target, "target-portrait")}</div></div>`;
     } else {
       main = `<div class="reveal-row">${bigPortrait(voter)}<div class="reveal-text"><div class="reveal-sub">${escapeHtml(nameOf(voter))} did not vote.</div></div></div>`;
@@ -1943,16 +2016,17 @@ $("voteStage").addEventListener("click", e => {
   const a = e.target.closest("[data-vote]")?.dataset.vote;
   const v = currentVote(); if (!a || !v) return;
   if (a === "dagger"){ daggerOn = !daggerOn; renderVote(true); return; }
+  if (a === "immune"){ immuneOn = !immuneOn; renderVote(true); return; }
   if (a === "submit" && (pickTarget || myVoteTarget(v))) submitVote(pickTarget || myVoteTarget(v));
   else if (a === "reveal") requestReveal();
   else if (a === "ghost-reveal") revealGhostVote();
   else if (a === "unanimous") unanimousDecision();
   else if (a === "not-unanimous") notUnanimous();
   else if (a === "reveal-fate") revealFate();
-  else if (a === "revote" && v.outcome && v.outcome.type === "tie") startVote({ candidates: v.outcome.ids, endgame: !!v.endgame, double: v.outcome.need === 2 });
+  else if (a === "revote" && v.outcome && v.outcome.type === "tie") startVote({ candidates: v.outcome.ids, endgame: !!v.endgame, double: v.outcome.need === 2, immuneCarry: v.immune || v.immuneCarry || null });
   else if (a === "force") forceReveal();
   else if (a === "close") putVote({ ...v, endsAt: Date.now() - GRACE_MS }).catch(()=> toast("Voting couldn't be closed. Try again."));
-  else if (a === "dismiss") putVote({ ...v, phase:"closed" }).then(() => { if (!v.endgame) startBreak(""); }).catch(()=> toast("The vote couldn't be closed. Try again."));
+  else if (a === "dismiss") putVote({ ...v, phase:"closed" }).then(() => settleBetrayal()).then(() => { if (!v.endgame) startBreak(""); }).catch(()=> toast("The vote couldn't be closed. Try again."));
 });
 setInterval(() => { renderVote(false); hostAutomation(); }, 250);
 
@@ -2127,7 +2201,7 @@ async function fanOut(t, force){
   const key = JSON.stringify([t.round, t.sub, t.mode, t.phase, t.attempt, t.shortlist, t.victim, t.tie, progress, nominationsOf(t)]);
   if (!force && key === lastFanKey) return;
   lastFanKey = key;
-  const view = { round: t.round, sub: t.sub || 0, chooser: t.chooser || null, shortlisters: t.shortlisters || null, nomMin: t.nomMin || 1, nomMax: t.nomMax || 2, taken: nominationsOf(t), optional: !!t.optional, declined: t.declined || null, accepted: !!t.accepted, mode: t.mode || "murder", task: t.task || null, failed: !!t.failed, phase: t.phase, attempt: t.attempt || 1, candidates: t.candidates, shortlist: t.shortlist, victim: t.victim, tie: t.tie, firstTie: t.firstTie || null, randomPick: !!t.randomPick, progress };
+  const view = { round: t.round, noMurder: !!t.noMurder, traitors: t.traitors, sub: t.sub || 0, chooser: t.chooser || null, shortlisters: t.shortlisters || null, nomMin: t.nomMin || 1, nomMax: t.nomMax || 2, taken: nominationsOf(t), optional: !!t.optional, declined: t.declined || null, accepted: !!t.accepted, mode: t.mode || "murder", task: t.task || null, failed: !!t.failed, phase: t.phase, attempt: t.attempt || 1, candidates: t.candidates, shortlist: t.shortlist, victim: t.victim, tie: t.tie, firstTie: t.firstTie || null, randomPick: !!t.randomPick, progress };
   await Promise.all(t.traitors.map(id => db.doc("turret/"+id).set(view)));
 }
 
@@ -2157,6 +2231,105 @@ async function applyRecruit(id, round){
   if (!all.includes(id)) all.push(id);
   await Promise.all(all.map(tid => db.doc("roles/"+tid).set({ role:"traitor", allies: all.filter(x => x !== tid), ...(tid === id ? { recruitedRound: round } : {}) })));
 }
+
+/* ----- Betrayal ----- */
+// Two Traitors left and 9 or fewer players (small party: 6 or fewer). Once per game.
+// The Turret runs as usual; each Traitor is warned after making their pick. If a Traitor is
+// banished at the next banishment, the other secretly receives Immunity.
+// Small party: the Traitors still pick, but nobody is murdered.
+// host/betrayal (host only): { used, armed, traitors, sawBanish, done, granted }
+let hostBetrayal = null;
+const betrayalState = () => isTrial() ? (trialGame.betrayal || null) : hostBetrayal;
+const betrayalUsed = () => !!(betrayalState() && betrayalState().used);
+async function putBetrayal(b){
+  if (isTrial()){ trialGame.betrayal = b; saveTrial(); return; }
+  hostBetrayal = b; await db.doc("host/betrayal").set(b);
+}
+function betrayalBlock(){
+  const R = roleMap(), living = livingIds(), tr = living.filter(id => R[id] === "traitor").length;
+  if (tr !== 2) return "It needs exactly 2 Traitors left in the game.";
+  const max = smallParty() ? 6 : 9;
+  if (living.length > max) return `It can be used once ${max} or fewer players remain.`;
+  return null;
+}
+async function startBetrayal(){
+  if (betrayalUsed() || betrayalBlock() || turretOrMurderBusy() || voteBusy()) return;
+  const R = roleMap(), living = livingIds();
+  const traitors = living.filter(id => R[id] === "traitor"), candidates = living.filter(id => R[id] === "faithful");
+  trialPicks = {};
+  try {
+    await putBetrayal({ used: true, at: Date.now(), traitors, armed: false, noMurder: smallParty() });
+    await setTurret(withShortlisting({ round: (turretState()?.round || 0) + 1, mode:"betrayal", noMurder: smallParty(), traitors, candidates, shortlist: [], victim: null, tie: null }));
+    specialOpen = false;
+    toast("Betrayal: the Traitors have been summoned to the Turret");
+  } catch(_){ toast("The Betrayal couldn't start. Try again."); }
+}
+// Called whenever players are banished by a vote.
+async function betrayalBanished(ids){
+  const b = betrayalState(); if (!b || !b.armed || b.done) return;
+  const hit = ids.filter(id => (b.traitors || []).includes(id));
+  if (!hit.length){ await putBetrayal({ ...b, sawBanish: true }); return; }
+  const S = allStatus(), R = roleMap();
+  const other = (b.traitors || []).find(id => !ids.includes(id) && !S[id] && R[id] === "traitor");
+  if (other){
+    const P = powersMap();
+    await setPower(other, { ...(P[other] || {}), immunity: true, immunityAt: Date.now() });
+  }
+  await putBetrayal({ ...b, done: true, granted: other || null, banishedTraitor: hit[0] });
+}
+// The next banishment is over (the vote was closed, or a new one began): the chance has passed.
+async function settleBetrayal(){
+  const b = betrayalState(); if (!b || !b.armed || b.done || !b.sawBanish) return;
+  await putBetrayal({ ...b, done: true, granted: null });
+}
+function betrayalPanelHtml(){
+  const b = betrayalState(), P = powersMap();
+  const holder = livingIds().find(id => (P[id] || {}).immunity);
+  if (!b && !holder) return "";
+  let line = "";
+  if (holder) line = `<b>${escapeHtml(nameOf(holder))}</b> holds Immunity. Only they and you know.`;
+  else if (b && b.armed && !b.done) line = `Armed. If ${namesList(b.traitors || [])} is banished at the next banishment, the other secretly receives Immunity.`;
+  else if (b && b.done && b.granted) line = `${escapeHtml(nameOf(b.granted))} received Immunity${(P[b.granted] || {}).immunityUsed ? " and has used it" : ""}.`;
+  else if (b && b.done) line = "No Traitor was banished at the next banishment, so nobody received Immunity.";
+  else if (b && b.used) line = "The Betrayal is under way in the Turret.";
+  return `<h3 style="margin-top:12px">Betrayal and Immunity</h3><p class="muted" style="margin:0;max-width:60ch;margin-inline:auto">${line}</p>`;
+}
+// The warning each Traitor sees after making their pick. They must close it themselves.
+let betrayalSeenLocal = {};
+function betrayalSeenKey(tv){ return "traitors.betrayal." + (gameState().startedAt || 0) + "." + tv.round + "." + myId(); }
+function renderBetrayalOverlay(){
+  const ov = $("betrayalOverlay");
+  let show = false, tv = null;
+  if (isPlayerView() && gameState().started && ownRole() === "traitor" && revealed){
+    tv = myTurretView();
+    if (tv && tv.mode === "betrayal"){
+      const mine = myPickView(), p = pickFor(tv, mine) ? mine : null;
+      const me_ = myId();
+      const acted = tv.chooser === me_ ? !!(p && p.vote) || tv.phase === "chosen" || tv.phase === "closed"
+        : !!(p && p.noms && p.noms.length) || ["vote","chosen","closed"].includes(tv.phase);
+      const k = betrayalSeenKey(tv);
+      const seen = betrayalSeenLocal[k] || store.get(k) === "1";
+      show = acted && !seen && !allStatus()[me_];
+    }
+  }
+  const was = !ov.hidden;
+  ov.hidden = !show;
+  if (show){
+    $("betrayalNoMurder").hidden = !tv.noMurder;
+    if (!was){
+      document.body.classList.remove("shake"); void document.body.offsetWidth; document.body.classList.add("shake");
+      try { navigator.vibrate && navigator.vibrate([120, 60, 180]); } catch(_){}
+      setTimeout(() => document.body.classList.remove("shake"), 900);
+      $("betrayalClose").focus();
+    }
+  }
+}
+$("betrayalClose").addEventListener("click", () => {
+  const tv = myTurretView(); if (!tv) return;
+  const k = betrayalSeenKey(tv); betrayalSeenLocal[k] = true; store.set(k, "1");
+  renderBetrayalOverlay();
+});
+setInterval(renderBetrayalOverlay, 400);
 
 /* ----- murder in plain sight ----- */
 async function startPlainSight(minutes, taskIndex){
@@ -2209,7 +2382,7 @@ function nominationsOf(t){
 async function closeNominations(t){
   const shortlist = nominationsOf(t);
   if (!shortlist.length){ toast("No one has been nominated yet"); return; }
-  if (t.mode === "murder") await recordShortlist(shortlist).catch(()=>{});
+  if (t.mode === "murder" || t.mode === "betrayal") await recordShortlist(shortlist).catch(()=>{});
   if (shortlist.length === 1) await setTurret({ ...t, phase:"chosen", phaseAt: Date.now(), shortlist, victim: shortlist[0], onlyOne: true });
   else await setTurret({ ...t, phase:"vote", phaseAt: Date.now(), shortlist });
 }
@@ -2254,7 +2427,7 @@ async function startMurder(){
   const living = livingIds();
   if (victim && !living.includes(victim)){ toast("That player is no longer in the game"); return; }
   const recruit = t.mode === "recruit";
-  const failed = !victim;
+  const failed = !victim || !!t.noMurder;
   const shielded = recruit || failed || hasShield(victim);
   // A shield means nobody dies: everyone, the target included, is revealed as safe.
   const chainPool = t.mode === "chain" && chainState() ? chainState().remaining.filter(id => living.includes(id)) : null;
@@ -2270,7 +2443,8 @@ async function startMurder(){
   const round = (murderState()?.round || 0) + 1;
   const ghostBetsLocked = ghostModeOn() ? snapshotBets("m" + round) : {};
   const PP = picksMap();
-  const pickers = victim ? (t.traitors || []).filter(id => { const p = PP[id]; if (!p || p.round !== t.round) return false; return (p.noms && p.noms.length) ? p.noms.includes(victim) : p.vote === victim; }) : [];
+  const pickers = victim && !t.noMurder ? (t.traitors || []).filter(id => { const p = PP[id]; if (!p || p.round !== t.round) return false; return (p.noms && p.noms.length) ? p.noms.includes(victim) : p.vote === victim; }) : [];
+  if (t.mode === "betrayal"){ const b = betrayalState() || {}; await putBetrayal({ ...b, used: true, armed: true, armedAt: now, traitors: t.traitors, sawBanish: false, done: false }); }
   if (t.chooser) await bumpStats(s => { s.chooserAt = { ...(s.chooserAt || {}), [t.chooser]: now }; }).catch(()=>{});
   const plan = { round, mode: t.mode || "murder", shields: livingIds().filter(id => hasShield(id)), pickers, ghostBets: ghostBetsLocked, victim: shielded ? null : victim, saved: shielded && !recruit && !failed ? victim : null, recruit: recruit ? victim : null, batches, finalSafe };
   const pub = { round, phase:"reveal", stage: batches.length ? "batches" : "suspense", startedAt: now,
@@ -2491,11 +2665,14 @@ function renderTurret(force){
       } else if (t.phase === "chosen" && t.failed){
         body = `<div class="verdict">The Traitors didn't complete their task.</div><p class="muted" style="margin:0">Nobody will be murdered. ${screenOn() ? "The community screen" : "Everyone's phones"} will still announce a murder in plain sight at breakfast.</p>`;
         acts = `<button class="btn solid" type="button" data-turret="start-murder">Start breakfast</button>`;
+      } else if (t.phase === "chosen" && t.noMurder){
+        body = `<p style="margin:0">${escapeHtml(nameOf(t.chooser))} chose <b>${escapeHtml(nameOf(t.victim))}</b>, but this is a small party Betrayal: <b>nobody will be murdered</b>. Both Traitors have been warned that if one of them is banished next, the other gains a major advantage.</p>`;
+        acts = `<button class="btn solid" type="button" data-turret="start-murder">Start breakfast</button>`;
       } else if (t.phase === "chosen"){
-        body = `${t.randomPick ? `<p style="margin:0">The revote tied again between ${namesList(t.tie)}, so the victim was chosen at random.</p>` : ""}${t.chooser && !t.onlyOne ? `<p style="margin:0">${escapeHtml(nameOf(t.chooser))} made the choice.</p>` : t.onlyOne ? `<p style="margin:0">Only one player made the shortlist.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(t.victim))} has been selected for ${t.mode === "recruit" ? "recruitment" : "murder"}.</div><p class="muted" style="margin:0">${t.mode === "recruit" ? "Only you and the Traitors can see this. Start breakfast when everyone is gathered. Nobody dies, and the new Traitor is told at the end of breakfast." : "Only you and the Traitors can see this. Start the murder when everyone is gathered for breakfast."}</p>${t.mode !== "recruit" && hasShield(t.victim) ? `<p class="shield-note" style="margin:0">${escapeHtml(nameOf(t.victim))} holds a shield. Nobody will be murdered tonight. The screen won't say why, and only ${escapeHtml(nameOf(t.victim))} will be told.</p>` : ""}`;
+        body = `${t.mode === "betrayal" ? `<p style="margin:0">Betrayal: both Traitors are warned on their phones after their picks. If one is banished next, the other secretly gets Immunity.</p>` : ""}${t.randomPick ? `<p style="margin:0">The revote tied again between ${namesList(t.tie)}, so the victim was chosen at random.</p>` : ""}${t.chooser && !t.onlyOne ? `<p style="margin:0">${escapeHtml(nameOf(t.chooser))} made the choice.</p>` : t.onlyOne ? `<p style="margin:0">Only one player made the shortlist.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(t.victim))} has been selected for ${t.mode === "recruit" ? "recruitment" : "murder"}.</div><p class="muted" style="margin:0">${t.mode === "recruit" ? "Only you and the Traitors can see this. Start breakfast when everyone is gathered. Nobody dies, and the new Traitor is told at the end of breakfast." : "Only you and the Traitors can see this. Start the murder when everyone is gathered for breakfast."}</p>${t.mode !== "recruit" && hasShield(t.victim) ? `<p class="shield-note" style="margin:0">${escapeHtml(nameOf(t.victim))} holds a shield. Nobody will be murdered tonight. The screen won't say why, and only ${escapeHtml(nameOf(t.victim))} will be told.</p>` : ""}`;
         acts = `<button class="btn solid" type="button" data-turret="start-murder">${t.mode === "recruit" ? "Start breakfast" : "Start murder"}</button>`;
       }
-      html = `<span class="kicker">${t.mode === "plain" ? "Murder in plain sight" : t.mode === "chain" ? "Safety Chain · The Turret" : "The Turret"} · Night ${t.round}${t.mode === "recruit" ? " · Recruitment" : ""}</span><h3>${t.mode === "recruit" ? "The Traitors are recruiting" : "The Traitors are meeting"}</h3>${body}
+      html = `<span class="kicker">${t.mode === "plain" ? "Murder in plain sight" : t.mode === "chain" ? "Safety Chain · The Turret" : t.mode === "betrayal" ? "Betrayal · The Turret" : "The Turret"} · Night ${t.round}${t.mode === "recruit" ? " · Recruitment" : ""}</span><h3>${t.mode === "recruit" ? "The Traitors are recruiting" : "The Traitors are meeting"}</h3>${body}
         <div class="acts">${acts}<button class="link" type="button" data-turret="cancel">Cancel the Turret</button></div>`;
     }
   } else if (player && gameState().started && murderActive()){
@@ -2593,7 +2770,7 @@ function renderTurret(force){
       } else if (tv.phase === "tie"){
         html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The vote is tied</h3><p style="margin:0">You're split between ${namesList(tv.tie)}. The host will decide.</p>`;
       } else if (tv.phase === "chosen"){
-        html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The deed is decided</h3>${tv.randomPick ? `<p style="margin:0">You tied again, so fate made the choice.</p>` : tv.chooser && tv.chooser !== myId() ? `<p style="margin:0">${escapeHtml(nameOf(tv.chooser))} made the choice.</p>` : ""}<div class="verdict role-traitor">${escapeHtml(nameOf(tv.victim))} ${tv.mode === "recruit" ? "will be recruited tonight. They join you after breakfast." : "will be murdered tonight."}</div><p class="muted" style="margin:0">Keep a straight face at breakfast.</p>`;
+        html = `<span class="kicker">The Turret · Night ${tv.round}</span><h3>The deed is decided</h3>${tv.randomPick ? `<p style="margin:0">You tied again, so fate made the choice.</p>` : tv.chooser && tv.chooser !== myId() ? `<p style="margin:0">${escapeHtml(nameOf(tv.chooser))} made the choice.</p>` : ""}<div class="verdict role-traitor">${tv.noMurder ? `${escapeHtml(nameOf(tv.victim))} was chosen, but there is no murder tonight.` : `${escapeHtml(nameOf(tv.victim))} ${tv.mode === "recruit" ? "will be recruited tonight. They join you after breakfast." : "will be murdered tonight."}`}</div><p class="muted" style="margin:0">Keep a straight face at breakfast.</p>`;
       }
     }
   }
@@ -2738,6 +2915,8 @@ const myPowerView = () => isTrial() ? ((trialGame.powers || {})[TRIAL_ME] || nul
 const hasShield = id => !!(powersMap()[id] && powersMap()[id].shield);
 const DAGGER_VOTES = 3;
 const hasDagger = id => !!(powersMap()[id] && powersMap()[id].dagger);
+const hasImmunity = id => !!(powersMap()[id] && powersMap()[id].immunity);
+const myHasImmunity = () => { const p = myPowerView(); return !!(p && p.immunity); };
 const myHasDagger = () => { const p = myPowerView(); return !!(p && p.dagger); };
 async function setPower(id, data){
   if (isTrial()){ trialGame.powers = trialGame.powers || {}; trialGame.powers[id] = data; saveTrial(); renderWall(); return; }
@@ -2751,6 +2930,9 @@ async function expireShields(before){
 function shieldNote(){
   const p = myPowerView();
   let out = p && p.shield ? `<span class="shield-note">You hold a secret shield. If the Traitors choose to murder you, it will save you. It lasts until the end of the next breakfast.</span>` : "";
+  if (p && p.immunity){
+    out += `<span class="shield-note immunity-note">You hold <b>Immunity</b>. It's a secret: nobody else knows. If you think you're about to be banished, play it when you vote. Every vote against you will be cancelled and the player with the next most votes is banished instead. It can be used once, at a Round Table banishment. It can't be used in a double banishment or at the Fire Pit.</span>`;
+  }
   if (p && p.dagger){
     const left = DAGGER_VOTES - (p.daggerSeen || 0);
     out += `<span class="shield-note dagger-note">You hold the Dagger. In one banishment vote of your choice, your vote counts twice. It can't be used in the Fire Pit, and it expires after ${left} more banishment vote${left === 1 ? "" : "s"}.</span>`;
@@ -2762,7 +2944,7 @@ function renderPowers(force){
   if (!(isHostView() && powersOpen && gameState().started)){ stage.hidden = true; powersKey = ""; return; }
   stage.hidden = false;
   const living = livingIds(), P = powersMap();
-  const key = JSON.stringify([living, P, ghostModeOn(), ghostMeta(), ghostIds(), smallParty()]);
+  const key = JSON.stringify([living, P, ghostModeOn(), ghostMeta(), ghostIds(), smallParty(), betrayalState()]);
   if (key === powersKey && !force) return;
   powersKey = key;
   const holders = living.filter(hasShield);
@@ -2774,6 +2956,7 @@ function renderPowers(force){
     <p style="margin:0;max-width:60ch;margin-inline:auto">The holder can make their vote count twice in one banishment vote of their choice. It's used up once drawn, can't be used in murder votes or the Fire Pit, and expires after ${DAGGER_VOTES} banishment votes. Only one player can hold it.</p>
     <p class="muted" style="margin:0">${living.filter(hasDagger).length ? `Held by ${namesList(living.filter(hasDagger))} (${DAGGER_VOTES - ((P[living.filter(hasDagger)[0]] || {}).daggerSeen || 0)} votes left).` : "Nobody holds the Dagger."} Tap a player to give or take it.</p>
     <div class="choices">${living.map(id => `<button class="choice" type="button" data-dagger="${escapeHtml(id)}" aria-pressed="${hasDagger(id)}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}${hasDagger(id) ? " · dagger" : ""}</span></button>`).join("")}</div>`}
+    ${betrayalPanelHtml()}
     ${ghostModeOn() ? `<h3 style="margin-top:12px">Revive</h3>
     <p style="margin:0;max-width:60ch;margin-inline:auto">Bring one eliminated player back into the game. They have a 1 in 6 chance of returning as a Traitor. Only you and they learn which. Once per game.</p>
     ${ghostMeta().reviveUsed
@@ -3173,11 +3356,13 @@ function renderChain(force){
   let html = "", key = "";
 
   if (host && started && specialOpen && !chainSetup && !plainSetup && !turretOrMurderBusy() && !voteBusy()){
-    key = ["special", mipsUsed(), chainUsed(), smallParty()].join("|");
+    key = ["special", mipsUsed(), chainUsed(), smallParty(), betrayalUsed(), betrayalBlock()].join("|");
     html = `<span class="kicker">Special murders</span><h3>Choose a special murder</h3>
       <div class="special-grid">
         ${smallParty() ? "" : `<button class="special-opt" type="button" data-chain="pick-plain" ${mipsUsed() ? "disabled" : ""}>
           <b>Murder in plain sight</b><span>The Traitors must complete a secret task to murder. ${mipsUsed() ? "Already used this game." : "Once per game."}</span></button>`}
+        ${betrayalUsed() ? "" : `<button class="special-opt" type="button" data-chain="pick-betrayal" ${betrayalBlock() ? "disabled" : ""}>
+          <b>Betrayal</b><span>${betrayalBlock() || `The Turret runs as usual, but each Traitor gets a warning after their pick. If a Traitor is banished next, the other gains a secret advantage.${smallParty() ? " Small party: there is no murder." : ""}`} Once per game.</span></button>`}
         ${chainUsed() ? "" : `<button class="special-opt" type="button" data-chain="pick-chain">
           <b>Safety Chain</b><span>Players save each other one by one until ${chainLeft()} remain unsafe. The Traitors murder one of them. Once per game.</span></button>`}
       </div>
@@ -3248,6 +3433,7 @@ $("chainStage").addEventListener("click", e => {
   if (hp){ const c = chainState(); if (c && c.phase === "chain") applyChainPick(c, hp.dataset.chainpick).catch(()=> toast("That didn't save. Try again.")); return; }
   const a = e.target.closest("[data-chain]")?.dataset.chain; if (!a) return;
   if (a === "pick-plain"){ specialOpen = false; plainSetup = true; plainSel = null; renderWall(); }
+  else if (a === "pick-betrayal"){ startBetrayal().then(() => renderWall()); }
   else if (a === "pick-chain"){ specialOpen = false; chainSetup = true; chainStarter = null; renderWall(); }
   else if (a === "special-close"){ specialOpen = false; renderWall(); }
   else if (a === "setup-cancel"){ chainSetup = false; renderWall(); }
@@ -3645,7 +3831,7 @@ const add = (o, id, n) => { o[id] = (o[id] || 0) + (n || 1); };
 async function recordVoteStats(v, outcome){
   const R = roleMap();
   const votes = {}, weights = {};
-  (v.revealed || []).forEach(r => { if (r.voter !== GHOSTS_ID){ votes[r.voter] = r.target || null; if ((r.weight || 1) > 1) weights[r.voter] = r.weight; } });
+  (v.revealed || []).forEach(r => { if (r.voter !== GHOSTS_ID){ votes[r.voter] = r.target || null; if (r.weight != null && r.weight !== 1) weights[r.voter] = r.weight; } });
   await logEvent({ type:"vote", round: v.round, revote: !!v.isRevote, endgame: !!v.endgame, votes, weights, ghost: (v.revealed || []).find(r => r.voter === GHOSTS_ID)?.target || null, outcome: outcome || null });
   await bumpStats(s => {
     s.inVote = s.inVote || {};
@@ -3800,7 +3986,7 @@ function buildChart(){
 const roleOf = (data, id) => data.finalRoles[id] || roleMap()[id] || data.start[id] || "faithful";
 function tallyText(v){
   const c = {};
-  Object.keys(v.votes || {}).forEach(k => { const t = v.votes[k]; if (t) c[t] = (c[t] || 0) + ((v.weights || {})[k] || 1); });
+  Object.keys(v.votes || {}).forEach(k => { const t = v.votes[k], w = (v.weights || {})[k]; if (t && w !== 0) c[t] = (c[t] || 0) + (w == null ? 1 : w); });
   const n = Object.values(c).sort((a, b) => b - a);
   return n.length ? n.join("–") : "—";
 }
@@ -3850,7 +4036,7 @@ function chartModel(){
       const c = cols[i];
       if (!c.votes.length){ cells.push({ text: "", cls: "" }); i++; continue; }
       const first = (c.votes[0].votes || {})[id];
-      const w = v => ((v.weights || {})[id] === 2 ? " ×2" : "");
+      const w = v => ((v.weights || {})[id] === 2 ? " ×2" : (v.weights || {})[id] === 0 ? " (immune)" : "");
       cells.push({ text: first ? nameTxt(first) + w(c.votes[0]) : "—", sub: c.votes.slice(1).map(v => (v.votes || {})[id] ? "Revote: " + nameTxt(v.votes[id]) + w(v) : "").filter(Boolean), cls: "" });
       i++;
     }
@@ -4022,5 +4208,6 @@ if (Object.values(FIREBASE_CONFIG).some(v => !v || v === "PASTE-HERE")){
   })();
 }
 </script>
+
 </body>
 </html>
