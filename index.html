@@ -1893,8 +1893,7 @@ function renderVote(force){
       } else {
         stage.innerHTML = `${kick}<div class="reveal-row">${bigPortrait(v.immune)}<div class="reveal-text">
           <div class="reveal-sub immunity-call">${nm} has a secret power: <b>Immunity</b>.</div>
-          <div class="reveal-target immunity-note">${nm} has chosen to use it. Any votes cast against ${nm} will not count.</div>
-          <div class="reveal-sub muted" style="font-size:clamp(.9rem,2.2vh,1.15rem)">The player with the next most votes will be banished.</div></div></div>`;
+          <div class="reveal-target immunity-note">${nm} has chosen to use it. Any votes cast against ${nm} will not count.</div></div></div>`;
       }
       fitNames(stage);
       return;
@@ -2931,7 +2930,7 @@ function shieldNote(){
   const p = myPowerView();
   let out = p && p.shield ? `<span class="shield-note">You hold a secret shield. If the Traitors choose to murder you, it will save you. It lasts until the end of the next breakfast.</span>` : "";
   if (p && p.immunity){
-    out += `<span class="shield-note immunity-note">You hold <b>Immunity</b>. It's a secret: nobody else knows. If you think you're about to be banished, play it when you vote. Every vote against you will be cancelled and the player with the next most votes is banished instead. It can be used once, at a Round Table banishment. It can't be used in a double banishment or at the Fire Pit.</span>`;
+    out += `<span class="shield-note immunity-note">You hold <b>Immunity</b>. It's a secret: nobody else knows. If you think you're about to be banished, play it when you vote. Every vote against you will be cancelled and the player with the next most votes is banished instead. It can be used once, at a Round Table banishment. It can't be used at the Fire Pit.</span>`;
   }
   if (p && p.dagger){
     const left = DAGGER_VOTES - (p.daggerSeen || 0);
