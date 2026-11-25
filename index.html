@@ -835,7 +835,7 @@ const TINY_MAX = 7;
 function traitorCount(n, small){ return n < 5 ? 0 : small && n <= TINY_MAX ? 1 : n <= 10 ? 2 : 3; }
 const tinyParty = () => !!gameState().tiny;
 // Small party: the Fire Pit opens at 4. After a Betrayal it waits for one banishment, then opens.
-// The banishment at 5 keeps its role secret.
+// Every banishment before the Fire Pit shows the role; only Fire Pit votes keep it secret.
 const fireAt = () => smallParty() ? 4 : 5;
 function fireOpen(){
   const n = livingIds().length;
@@ -848,7 +848,7 @@ function fireOpen(){
   }
   return n <= fireAt();
 }
-const secretRoleAt = () => smallParty() ? 5 : 6;
+const secretRoleAt = () => smallParty() ? 0 : 6;   // small party: no secret banishments before the Fire Pit
 function shuffle(a){
   const r = new Uint32Array(a.length); crypto.getRandomValues(r);
   for (let i = a.length - 1; i > 0; i--){ const j = r[i] % (i + 1); [a[i], a[j]] = [a[j], a[i]]; }
@@ -1601,7 +1601,7 @@ async function startVote(opts){
   const now = Date.now();
   pickTarget = null; trialVotes = {}; trialDaggerVote = false; daggerOn = false; trialRevealReq = false; trialImmuneVote = false; immuneOn = false;
   if (!revote) await settleBetrayal().catch(()=>{});
-  // From the final 6 (final 4 in small party mode), a banished player's role stays secret until the end.
+  // From the final 6, a banished player's role stays secret until the end. Small party: only Fire Pit votes are secret.
   // Small party: the banishment straight after a Betrayal always shows the role.
   const bt = betrayalState(), afterBetrayal = smallParty() && !!(bt && bt.armed && !bt.done && !bt.sawBanish);
   const secretRole = !(opts && opts.endgame) && !afterBetrayal && livingIds().length <= secretRoleAt();
