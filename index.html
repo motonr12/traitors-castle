@@ -241,6 +241,9 @@ body.shake .wrap, body.shake #betrayalOverlay .betrayal-card{animation:betrayal-
 .screen-mode #noticeOverlay p{font-size:clamp(1.2rem,2.4vw,1.8rem)}
 #backToHost{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:40;box-shadow:0 8px 20px -6px rgba(0,0,0,.7)}
 #backToHost[hidden]{display:none}
+#recruitOverlay{position:fixed;inset:0;z-index:61;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at center,rgba(90,10,10,.88),rgba(5,3,3,.97))}
+#recruitOverlay[hidden]{display:none}
+body.shake #recruitOverlay .betrayal-card{animation:betrayal-shake .8s cubic-bezier(.36,.07,.19,.97) both}
 #immunityOverlay{position:fixed;inset:0;z-index:59;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at center,rgba(70,55,10,.88),rgba(5,4,3,.97))}
 #immunityOverlay[hidden]{display:none}
 body.shake #immunityOverlay .betrayal-card{animation:betrayal-shake .8s cubic-bezier(.36,.07,.19,.97) both}
@@ -421,6 +424,9 @@ details.ghost-block > summary:focus-visible{outline:2px solid var(--parchment);o
     </div>
   </div>
   <button id="backToHost" class="btn small solid" type="button" data-act="as-host" hidden>Back to host screen</button>
+  <div id="recruitOverlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="recruitTitle">
+    <div class="betrayal-card" id="recruitCard"></div>
+  </div>
   <div id="immunityOverlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="immunityTitle">
     <div class="betrayal-card notice-card" id="immunityCard"></div>
   </div>
@@ -2560,6 +2566,40 @@ $("immunityOverlay").addEventListener("click", e => {
   else if (a === "close"){ const p = myPowerView(); if (p) store.set(immunitySeenKey(p), "1"); renderImmunityOverlay(); }
 });
 setInterval(renderImmunityOverlay, 500);
+
+// A private pop-up for a player who has just been recruited. Same two steps: hide the screen, then read it.
+let recruitStage = 0, recruitShownKey = null;
+function recruitSeenKey(r){ return "traitors.recruited." + (gameState().startedAt || 0) + "." + myId() + "." + r; }
+function renderRecruitOverlay(){
+  const ov = $("recruitOverlay");
+  const r = isPlayerView() && gameState().started && !allStatus()[myId()] && ownRole() === "traitor" ? ownRecruited() : null;
+  const k = r ? recruitSeenKey(r) : null;
+  const show = !!k && store.get(k) !== "1";
+  if (!show){ ov.hidden = true; recruitShownKey = null; recruitStage = 0; return; }
+  const first = ov.hidden;
+  ov.hidden = false;
+  if (k !== recruitShownKey){ recruitShownKey = k; recruitStage = 0; }
+  $("recruitCard").innerHTML = recruitStage === 0
+    ? `<span class="kicker" style="color:#e08a8a">A private message</span>
+       <h3 id="recruitTitle">Make sure nobody can see your screen</h3>
+       <div class="acts"><button class="btn solid" type="button" data-rec="show">Show me</button></div>`
+    : `<span class="kicker" style="color:#e08a8a">The Traitors have chosen you</span>
+       <h3 id="recruitTitle">You have been recruited</h3>
+       <p>You are now a <b>Traitor</b>. ${allyLine()}</p>
+       <p class="muted" style="font-size:.9rem">From now on you win with the Traitors. Join them in the Turret, and keep your new role hidden from everyone else.</p>
+       <div class="acts"><button class="btn solid" type="button" data-rec="close">Close</button></div>`;
+  if (first){
+    document.body.classList.remove("shake"); void document.body.offsetWidth; document.body.classList.add("shake");
+    try { navigator.vibrate && navigator.vibrate([120, 60, 180]); } catch(_){}
+    setTimeout(() => document.body.classList.remove("shake"), 900);
+  }
+}
+$("recruitOverlay").addEventListener("click", e => {
+  const a = e.target.closest("[data-rec]")?.dataset.rec; if (!a) return;
+  if (a === "show"){ recruitStage = 1; renderRecruitOverlay(); }
+  else if (a === "close"){ const r = ownRecruited(); if (r) store.set(recruitSeenKey(r), "1"); revealed = true; renderRecruitOverlay(); renderWall(); }
+});
+setInterval(renderRecruitOverlay, 500);
 setInterval(renderNotice, 500);
 
 /* ----- murder in plain sight ----- */
