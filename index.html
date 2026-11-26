@@ -2881,7 +2881,7 @@ function renderShieldVote(force){
     key = ["p", sv.round, pick, opts.join(",")].join("|");
     html = sv.chain
       ? `<span class="kicker">The shield vote · Safety Chain</span><h3>Which of the unsafe should be protected?</h3>
-      <p style="margin:0;max-width:56ch;margin-inline:auto">Vote for one of the unsafe players. Whoever gets the most votes secretly gets a shield for tonight's murder and the Dagger. You can't vote for yourself.</p>`
+      <p style="margin:0;max-width:56ch;margin-inline:auto">Vote for one of the unsafe players. Whoever gets the most votes is secretly protected from tonight's murder. You can't vote for yourself.</p>`
       : `<span class="kicker">The shield vote</span><h3>Who should be protected tonight?</h3>
       <p style="margin:0;max-width:56ch;margin-inline:auto">Vote for the player you want to shield. Whoever gets the most votes is secretly protected from tonight's murder. You can't vote for yourself.</p>`;
     html += `
