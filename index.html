@@ -241,6 +241,11 @@ body.shake .wrap, body.shake #betrayalOverlay .betrayal-card{animation:betrayal-
 .screen-mode #noticeOverlay p{font-size:clamp(1.2rem,2.4vw,1.8rem)}
 #backToHost{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:40;box-shadow:0 8px 20px -6px rgba(0,0,0,.7)}
 #backToHost[hidden]{display:none}
+.svote-stage{border-color:#8fa3ad;background:radial-gradient(ellipse 90% 80% at 50% 0%,rgba(143,163,173,.2),rgba(15,19,17,0) 70%),var(--stone-2)}
+.svote-stage .kicker{color:#c3d3da}
+#svShieldOverlay{position:fixed;inset:0;z-index:58;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at center,rgba(40,60,70,.9),rgba(3,5,6,.97))}
+#svShieldOverlay[hidden]{display:none}
+body.shake #svShieldOverlay .betrayal-card{animation:betrayal-shake .8s cubic-bezier(.36,.07,.19,.97) both}
 #recruitOverlay{position:fixed;inset:0;z-index:61;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at center,rgba(90,10,10,.88),rgba(5,3,3,.97))}
 #recruitOverlay[hidden]{display:none}
 body.shake #recruitOverlay .betrayal-card{animation:betrayal-shake .8s cubic-bezier(.36,.07,.19,.97) both}
@@ -320,6 +325,22 @@ body.shake #immunityOverlay .betrayal-card{animation:betrayal-shake .8s cubic-be
 .award-title{font-family:var(--font-display);font-size:clamp(2rem,7vh,4rem);line-height:1.05;letter-spacing:.06em;color:var(--brass)}
 .award-line{font-family:var(--font-display);font-size:clamp(1.1rem,3.4vh,1.8rem);letter-spacing:.05em}
 .award .fire-row .fire-player{animation:fadein 2s ease-in .8s both}
+.final-board{display:flex;flex-direction:column;align-items:center;gap:clamp(10px,2.2vh,26px);width:100%;animation:fadein 1.4s ease-in both}
+.board-winners{display:flex;flex-direction:column;align-items:center;gap:clamp(8px,1.6vh,16px)}
+.board-winners .final-headline{margin:0}
+.board-winner-row .fire-player,.screen-mode .board-winner-row .fire-player{width:clamp(80px,min(12vw,19vh),220px)}
+.board-winner-row .fire-player .plaque{font-size:clamp(.95rem,2vh,1.3rem);margin-top:6px}
+.board-winner-row .fire-player .role-tag{margin-top:4px}
+.board-awards{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;padding-top:clamp(8px,1.6vh,18px);border-top:1px solid var(--brass-dim)}
+.board-award-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;width:100%;max-width:1400px;text-align:left}
+.board-award-grid .board-award{flex:0 1 calc(25% - 8px);min-width:190px}
+.board-award{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border:1px solid var(--brass-dim);background:var(--stone);min-width:0}
+.board-award b{font-family:var(--font-display);font-weight:400;font-size:clamp(1rem,2vh,1.2rem);color:var(--brass);letter-spacing:.05em}
+.board-award .muted{font-size:.85rem}
+.board-award-who{display:flex;flex-wrap:wrap;gap:6px 12px}
+.board-award-person{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.board-award-person img,.board-award-person .ph{width:24px;height:32px;object-fit:cover;flex:none;background:var(--oak);display:block}
+.board-award-person span{overflow-wrap:anywhere}
 .award-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;width:100%;max-width:1000px;margin-inline:auto;text-align:left}
 .award-mini{display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--brass-dim);background:var(--stone);min-width:0}
 .award-mini b{font-family:var(--font-display);font-weight:400;font-size:1.2rem;color:var(--brass);letter-spacing:.05em}
@@ -357,8 +378,8 @@ body.shake #immunityOverlay .betrayal-card{animation:betrayal-shake .8s cubic-be
 .chart-head h3{text-align:left}
 .chart-wrap{overflow-x:auto;max-width:100%;border:1px solid var(--brass-dim)}
 .game-chart{border-collapse:collapse;font-size:.88rem;font-variant-numeric:tabular-nums;min-width:100%;background:#f3efe6;color:#1d1b17}
-.game-chart th,.game-chart td{border:1px solid #b9b3a5;padding:6px 10px;text-align:center;white-space:nowrap;vertical-align:middle}
-.game-chart small{display:block;font-size:.72rem;font-style:italic;opacity:.85}
+.game-chart th,.game-chart td{border:1px solid #b9b3a5;padding:.45em .8em;text-align:center;white-space:nowrap;vertical-align:middle}
+.game-chart small{display:block;font-size:.8em;font-style:italic;opacity:.85}
 .game-chart thead th{background:#e2ddd1;font-weight:700}
 .game-chart .ch-label{background:#e2ddd1;text-align:center;font-weight:700;position:sticky;left:0;z-index:1}
 .game-chart .ch-name{position:sticky;left:0;z-index:1;background:#ebe6db;font-weight:700;text-align:left;padding-left:16px;border-left-width:8px}
@@ -424,6 +445,9 @@ details.ghost-block > summary:focus-visible{outline:2px solid var(--parchment);o
     </div>
   </div>
   <button id="backToHost" class="btn small solid" type="button" data-act="as-host" hidden>Back to host screen</button>
+  <div id="svShieldOverlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="svShieldTitle">
+    <div class="betrayal-card" id="svShieldCard"></div>
+  </div>
   <div id="recruitOverlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="recruitTitle">
     <div class="betrayal-card" id="recruitCard"></div>
   </div>
@@ -557,6 +581,7 @@ details.ghost-block > summary:focus-visible{outline:2px solid var(--parchment);o
     <section id="ghostStage" class="stage ghost-stage" hidden></section>
     <section id="chartStage" class="stage chart-stage" hidden></section>
     <section id="turretStage" class="stage turret-stage" hidden aria-live="polite"></section>
+    <section id="svoteStage" class="stage svote-stage" hidden aria-live="polite"></section>
     <section id="voteStage" class="stage" hidden aria-live="polite"></section>
     <section id="fireStage" class="stage fire-stage" hidden aria-live="polite"></section>
     <section id="gameBar" class="gamebar" hidden aria-live="polite"></section>
@@ -736,6 +761,8 @@ function startSubs(){
   db.doc("game/announce").onSnapshot(s => { liveAnnounce = s.exists ? s.data() : null; renderAnnounce(); }, ()=>{});
   db.doc("game/notice").onSnapshot(s => { liveNotice = s.exists ? s.data() : null; renderNotice(); renderWall(); }, ()=>{});
   db.doc("game/break").onSnapshot(s => { liveBreak = s.exists ? s.data() : null; renderBreak(); }, ()=>{});
+  db.doc("game/chart").onSnapshot(s => { liveChartShow = s.exists ? s.data() : null; renderChart(); renderFire(true); }, ()=>{});
+  db.doc("game/svote").onSnapshot(s => { liveSvote = s.exists ? s.data() : null; renderShieldVote(true); }, ()=>{});
   db.doc("settings/screen").onSnapshot(s => { screenSetting = s.exists ? s.data() : null; renderWall(); }, ()=>{});
   db.doc("settings/party").onSnapshot(s => { partySetting = s.exists ? s.data() : null; renderWall(); }, ()=>{});
   db.doc("settings/ghost").onSnapshot(s => { ghostSetting = s.exists ? s.data() : null; renderWall(); }, ()=>{});
@@ -782,6 +809,7 @@ function startSubs(){
     db.collection("fpicks").onSnapshot(s => { fpicks = {}; s.docs.forEach(d => { if (d.exists) fpicks[d.id] = d.data(); }); renderFire(true); }, ()=>{});
     db.collection("powers").onSnapshot(s => { hostPowers = {}; s.docs.forEach(d => { if (d.exists) hostPowers[d.id] = d.data(); }); renderWall(); }, ()=>{});
     db.collection("tpicks").onSnapshot(s => { tpicks = {}; s.docs.forEach(d => { if (d.exists) tpicks[d.id] = d.data(); }); renderTurret(true); }, ()=>{});
+    db.collection("svotes").onSnapshot(s => { svotes = {}; s.docs.forEach(d => { if (d.exists) svotes[d.id] = d.data(); }); renderShieldVote(true); }, ()=>{});
   }
   if (me){
     db.doc("turret/"+me).onSnapshot(s => { myTurret = s.exists ? s.data() : null; renderTurret(true); }, ()=>{});
@@ -790,6 +818,7 @@ function startSubs(){
     db.doc("fpicks/"+me).onSnapshot(s => { myFpick = s.exists ? s.data() : null; renderFire(true); }, ()=>{});
     db.doc("powers/"+me).onSnapshot(s => { myPower = s.exists ? s.data() : null; renderWall(); }, ()=>{});
     db.doc("tpicks/"+me).onSnapshot(s => { myPick = s.exists ? s.data() : null; renderTurret(true); }, ()=>{});
+    db.doc("svotes/"+me).onSnapshot(s => { mySvote = s.exists ? s.data() : null; renderShieldVote(true); }, ()=>{});
   }
   if (isOwner){
     db.collection("votes").onSnapshot(s => {
@@ -906,6 +935,9 @@ async function clearNightData(){
   await db.doc("game/ghosts").delete().catch(()=>{});
   await Promise.all(Object.keys(hostGhosts).map(id => db.doc("ghost/"+id).delete().catch(()=>{})));
   await Promise.all(Object.keys(fpicks).map(id => db.doc("fpicks/"+id).delete().catch(()=>{})));
+  await db.doc("game/svote").delete().catch(()=>{});
+  await db.doc("game/chart").delete().catch(()=>{});
+  await Promise.all(Object.keys(svotes).map(id => db.doc("svotes/"+id).delete().catch(()=>{})));
 }
 async function endGame(){
   gbConfirm = null;
@@ -1411,6 +1443,7 @@ function renderWall(){
   renderGameBar();
   renderVote(false);
   renderTurret(false);
+  renderShieldVote(false);
   renderPowers(false);
   renderFire(false);
   renderGhost(false);
@@ -2355,6 +2388,7 @@ function turretProgress(t){
   return { nominated, nomTotal: sl.length, voted, voteTotal: voters.length, decided, total: t.traitors.length };
 }
 async function setTurret(t){
+  if (t.phase !== "closed") await ensureShieldVote(t).catch(()=>{});
   // An optional recruit is asked first; a forced recruit simply becomes a Traitor after breakfast.
   if (t.mode === "recruit" && t.optional && t.phase === "chosen" && t.victim && !t.accepted) t = { ...t, phase:"offer", phaseAt: Date.now() };
   if (isTrial()){ trialGame.turret = t; saveTrial(); renderWall(); return; }
@@ -2681,7 +2715,7 @@ async function pickVictim(id){
 }
 async function cancelTurret(){
   const t = turretState(); if (!t) return;
-  try { await setTurret({ ...t, phase:"closed" }); if (plainAnnounced()) await setPlainAnnounce(false); if (t.mode === "chain" && chainLive()) await putChain({ ...chainState(), phase:"closed" }); } catch(_){ toast("The Turret couldn't be closed. Try again."); }
+  try { await closeShieldVote(); await setTurret({ ...t, phase:"closed" }); if (plainAnnounced()) await setPlainAnnounce(false); if (t.mode === "chain" && chainLive()) await putChain({ ...chainState(), phase:"closed" }); } catch(_){ toast("The Turret couldn't be closed. Try again."); }
 }
 // Once the castle is down to SMALL_BREAKFAST players or fewer, people arrive 1 or 2 at a time.
 const SMALL_BREAKFAST = 8;
@@ -2703,7 +2737,9 @@ async function startMurder(){
   if (victim && !living.includes(victim)){ toast("That player is no longer in the game"); return; }
   const recruit = t.mode === "recruit";
   const failed = !victim || !!t.noMurder;
-  const shielded = recruit || failed || hasShield(victim);
+  // The shield vote closes as breakfast starts. Its winner is protected from tonight's murder.
+  const sv = shieldVoteFor(t), svResult = sv ? shieldVoteWinner(sv) : null, svWinner = svResult ? svResult.winner : null;
+  const shielded = recruit || failed || hasShield(victim) || (!!victim && victim === svWinner);
   // A shield means nobody dies: everyone, the target included, is revealed as safe.
   const chainPool = t.mode === "chain" && chainState() ? chainState().remaining.filter(id => living.includes(id)) : null;
   const field = chainPool && (!victim || chainPool.includes(victim)) ? chainPool : living;
@@ -2723,10 +2759,13 @@ async function startMurder(){
   const pickers = victim && !t.noMurder ? (t.traitors || []).filter(id => { const p = PP[id]; if (!p || p.round !== t.round) return false; return (p.noms && p.noms.length) ? p.noms.includes(victim) : p.vote === victim; }) : [];
   if (t.mode === "betrayal"){ const b = betrayalState() || {}; await putBetrayal({ ...b, used: true, armed: true, armedAt: now, traitors: t.traitors, sawBanish: false, done: false }); }
   if (t.chooser) await bumpStats(s => { s.chooserAt = { ...(s.chooserAt || {}), [t.chooser]: now }; }).catch(()=>{});
-  const plan = { round, mode: t.mode || "murder", shields: livingIds().filter(id => hasShield(id)), pickers, ghostBets: ghostBetsLocked, victim: shielded ? null : victim, saved: shielded && !recruit && !failed ? victim : null, recruit: recruit ? victim : null, batches, finalSafe };
+  const plan = { round, mode: t.mode || "murder", voteShield: svWinner,
+    shieldVote: sv ? { round: sv.round, game: sv.game, chain: !!sv.chain, winner: svWinner, votes: svWinner ? svResult.counts[svWinner] : 0, total: svResult.total, tie: !!svResult.tie, saved: !!victim && victim === svWinner } : null, shields: [...new Set(livingIds().filter(id => hasShield(id)).concat(svWinner ? [svWinner] : []))], pickers, ghostBets: ghostBetsLocked, victim: shielded ? null : victim, saved: shielded && !recruit && !failed ? victim : null, recruit: recruit ? victim : null, batches, finalSafe };
   const pub = { round, phase:"reveal", stage: batches.length ? "batches" : "suspense", startedAt: now,
     nextAt: now + (batches.length ? FIRST_BATCH_MS : FINAL_MS), total: field.length, shown: [], final: null, plain: t.mode === "plain" };
   try {
+    if (sv) await closeShieldVote();
+    if (svWinner) await grantVoteShield(svWinner, round, now, !!(sv && sv.chain));
     if (isTrial()){ trialGame.plan = plan; trialGame.murder = pub; trialGame.turret = { ...t, phase:"closed" }; trialGame.plainAnnounce = false;
       if (trialGame.chain && t.mode === "chain") trialGame.chain = { ...trialGame.chain, phase:"closed", completed: true }; saveTrial(); renderWall(); }
     else {
@@ -2751,6 +2790,167 @@ async function endMurder(){
   if (m.phase === "done" && !m.applied && plan && plan.round === m.round && m.final){ try { await applyBreakfast(m, plan); } catch(_){} }
   try { await putMurder({ ...m, phase:"closed" }); await expireShields(m.startedAt); await startBreak("Until the Round Table"); } catch(_){ toast("The murder phase couldn't end. Try again."); }
 }
+
+/* ----- the shield vote ----- */
+// While the Traitors meet in the Turret, every living player votes for someone (not themselves) to get a
+// shield. Traitors see the same screen, but their votes don't count. It closes when breakfast starts; the
+// player with the most votes (ties: at random) is protected from that night's murder. Only they are told,
+// by a private pop-up as breakfast starts. Skipped on the small party's Night 1 recruit, when nobody can die.
+let liveSvote = null, svotes = {}, mySvote = null, trialSvotes = {}, svKey = "";
+const svoteState = () => isTrial() ? (trialGame.svote || null) : liveSvote;
+const svGame = () => gameState().startedAt || 0;
+const svotesMap = () => isTrial() ? trialSvotes : svotes;
+const mySvoteView = () => isTrial() ? (trialSvotes[TRIAL_ME] || null) : mySvote;
+async function putSvote(sv){
+  if (isTrial()){ trialGame.svote = sv; saveTrial(); renderWall(); return; }
+  liveSvote = sv; await db.doc("game/svote").set(sv);
+}
+function shieldVoteFor(t){
+  const sv = svoteState();
+  return sv && t && sv.game === svGame() && sv.round === t.round ? sv : null;
+}
+async function ensureShieldVote(t){
+  if (!gameState().started || !t || shieldVoteFor(t)) return;
+  const firstNight = !(statsNow().events || []).some(e => e.type === "night");
+  if (tinyParty() && firstNight) return;
+  if (isTrial()) trialSvotes = {};
+  // During a Safety Chain the vote is only between the unsafe players, and the winner also gets the Dagger.
+  const c = t.mode === "chain" ? chainState() : null;
+  const candidates = c ? c.remaining.filter(id => livingIds().includes(id)) : null;
+  await putSvote({ round: t.round, game: svGame(), open: true, openedAt: Date.now(), voters: livingIds(), candidates, chain: !!c });
+}
+async function closeShieldVote(){
+  const sv = svoteState();
+  if (sv && sv.open) await putSvote({ ...sv, open: false, closedAt: Date.now() });
+}
+function shieldVoteWinner(sv){
+  const R = roleMap(), living = livingIds(), V = svotesMap(), counts = {};
+  let total = 0, inCount = 0;
+  (sv.voters || []).forEach(id => {
+    const v = V[id];
+    if (!v || v.round !== sv.round || v.game !== sv.game) return;
+    inCount++;
+    if (R[id] === "traitor" || !living.includes(id)) return;                    // Traitors' votes don't count
+    if (!v.target || v.target === id || !living.includes(v.target)) return;
+    if (sv.candidates && !sv.candidates.includes(v.target)) return;
+    counts[v.target] = (counts[v.target] || 0) + 1; total++;
+  });
+  const max = Math.max(0, ...Object.values(counts));
+  const top = Object.keys(counts).filter(k => counts[k] === max);
+  return { winner: max ? top[Math.floor(Math.random() * top.length)] : null, counts, total, inCount, tie: top.length > 1 };
+}
+async function grantVoteShield(id, murderRound, now, withDagger){
+  const all = powersMap(), P = all[id] || {};
+  let extra = {};
+  if (withDagger){
+    // The Safety Chain winner also takes the Dagger, from whoever held it.
+    await Promise.all(Object.keys(all).filter(x => x !== id && all[x].dagger).map(x => setPower(x, { ...all[x], dagger: false })));
+    extra = { dagger: true, daggerSeen: 0, daggerUsed: false, daggerExpired: false, daggerAt: now };
+  }
+  // Granted just before this breakfast starts, so it expires when this breakfast ends.
+  await setPower(id, { ...P, ...extra, shield: true, grantedAt: P.shield ? P.grantedAt : now - 1, voteShield: { round: murderRound, game: svGame(), dagger: !!withDagger } });
+}
+async function submitShieldVote(target){
+  const sv = svoteState(); if (!sv || !sv.open || target === myId()) return;
+  const data = { round: sv.round, game: sv.game, target, at: Date.now() };
+  if (isTrial()){ trialSvotes[TRIAL_ME] = data; renderShieldVote(true); return; }
+  mySvote = data; renderShieldVote(true);
+  try { await db.doc("svotes/" + myId()).set(data); } catch(_){ toast("Your vote didn't save. Try again."); }
+}
+function renderShieldVote(force){
+  const stage = $("svoteStage");
+  const sv = svoteState(), me = myId(), living = livingIds();
+  const live = !!(sv && sv.open && sv.game === svGame() && gameState().started);
+  let html = "", key = "";
+  const pl = planState(), res = pl && pl.shieldVote;
+  if (!live && sv && !sv.open && sv.game === svGame() && gameState().started && murderActive() && isHostView() && !isPlayerView() && res && res.round === sv.round && res.game === sv.game){
+    // Only the host sees the result, and only while breakfast is on.
+    key = ["hr", res.round, res.winner, res.votes].join("|");
+    html = `<span class="kicker">The shield vote${res.chain ? " · Safety Chain" : ""} · only you can see this</span>
+      <h3>${res.winner ? `${escapeHtml(nameOf(res.winner))} won the shield` : "Nobody won the shield"}</h3>
+      <p style="margin:0">${res.winner ? `${res.votes} of ${res.total} counted vote${res.total === 1 ? "" : "s"}${res.tie ? ", after a tie settled at random" : ""}. ${res.chain ? "They also took the Dagger. " : ""}${res.saved ? "The Traitors chose them, so the shield saved them tonight." : "The Traitors chose someone else."}` : "No Faithful voted, so nobody was protected."}</p>`;
+  } else if (live && isHostView() && !isPlayerView()){
+    const r = shieldVoteWinner(sv);
+    key = ["h", sv.round, r.inCount, (sv.voters || []).length].join("|");
+    html = `<span class="kicker">The shield vote${sv.chain ? " · Safety Chain" : ""}</span><h3>Open until breakfast</h3>
+      <p style="margin:0">${r.inCount} of ${(sv.voters || []).length} votes are in. ${sv.chain ? `Everyone votes for one of the unsafe. The winner secretly gets a shield for tonight's murder and the Dagger, even if they're a Traitor.` : "The player with the most votes from the Faithful is protected from tonight's murder."} Traitors' votes don't count.</p>
+      <p class="muted" style="margin:0">It closes when you start breakfast. Only the winner is told, as breakfast starts.</p>`;
+  } else if (live && isPlayerView() && !isScreenView() && (sv.voters || []).includes(me) && living.includes(me)){
+    const mine = mySvoteView(), pick = mine && mine.round === sv.round && mine.game === sv.game ? mine.target : null;
+    const opts = (sv.candidates || living).filter(id => id !== me && living.includes(id));
+    key = ["p", sv.round, pick, opts.join(",")].join("|");
+    html = sv.chain
+      ? `<span class="kicker">The shield vote · Safety Chain</span><h3>Which of the unsafe should be protected?</h3>
+      <p style="margin:0;max-width:56ch;margin-inline:auto">Vote for one of the unsafe players. Whoever gets the most votes secretly gets a shield for tonight's murder and the Dagger. You can't vote for yourself.</p>`
+      : `<span class="kicker">The shield vote</span><h3>Who should be protected tonight?</h3>
+      <p style="margin:0;max-width:56ch;margin-inline:auto">Vote for the player you want to shield. Whoever gets the most votes is secretly protected from tonight's murder. You can't vote for yourself.</p>`;
+    html += `
+      <div class="choices">${opts.map(id => choiceBtn(id, pick ? [pick] : [], "data-svote")).join("")}</div>
+      <p class="muted" style="margin:0">${pick ? `Your vote for <b>${escapeHtml(nameOf(pick))}</b> is in. You can change it until breakfast starts.` : "The vote closes when breakfast starts. Nobody is told who won except the winner."}</p>`;
+  }
+  if (!html){ if (!stage.hidden){ stage.hidden = true; svKey = ""; } return; }
+  stage.hidden = false;
+  if (key === svKey && !force) return;
+  svKey = key; stage.innerHTML = html;
+}
+$("svoteStage").addEventListener("click", e => {
+  const b = e.target.closest("[data-svote]"); if (b) submitShieldVote(b.dataset.svote);
+});
+// Simulated players and bots cast their shield votes a few seconds after it opens.
+const svBotAt = {};
+async function svBotAutomation(){
+  if (role !== "host" && !isTrial()) return;
+  const sv = svoteState(); if (!sv || !sv.open || sv.game !== svGame()) return;
+  const living = livingIds(), now = Date.now();
+  const bots = isTrial() ? (sv.voters || []).filter(id => id !== TRIAL_ME) : liveBots().filter(id => (sv.voters || []).includes(id));
+  for (const id of bots){
+    if (!living.includes(id)) continue;
+    const cur = svotesMap()[id]; if (cur && cur.round === sv.round && cur.game === sv.game) continue;
+    const k = sv.game + ":" + sv.round + ":" + id;
+    if (!svBotAt[k]) svBotAt[k] = now + 2000 + Math.random() * 8000;
+    if (now < svBotAt[k]) continue;
+    const opts = (sv.candidates || living).filter(x => x !== id && living.includes(x));
+    const data = { round: sv.round, game: sv.game, target: opts[Math.floor(Math.random() * opts.length)] || null, at: now };
+    if (isTrial()) trialSvotes[id] = data;
+    else { svotes[id] = data; await db.doc("svotes/" + id).set(data).catch(()=>{}); }
+  }
+  if (isTrial()) renderShieldVote(false);
+}
+setInterval(svBotAutomation, 1000);
+// The winner's private pop-up, shown as breakfast starts.
+let svShieldStage = 0, svShieldShownKey = null;
+function svShieldKey(p){ return "traitors.svshield." + p.voteShield.game + "." + myId() + "." + p.voteShield.round; }
+function renderSvShieldOverlay(){
+  const ov = $("svShieldOverlay");
+  const p = isPlayerView() && !isScreenView() && gameState().started ? myPowerView() : null, m = murderState();
+  const k = p && p.voteShield && p.voteShield.game === svGame() && m && m.round === p.voteShield.round ? svShieldKey(p) : null;
+  const show = !!k && store.get(k) !== "1";
+  if (!show){ ov.hidden = true; svShieldShownKey = null; svShieldStage = 0; return; }
+  const first = ov.hidden;
+  ov.hidden = false;
+  if (k !== svShieldShownKey){ svShieldShownKey = k; svShieldStage = 0; }
+  $("svShieldCard").innerHTML = svShieldStage === 0
+    ? `<span class="kicker" style="color:#c3d3da">A private message</span>
+       <h3 id="svShieldTitle">Make sure nobody can see your screen</h3>
+       <div class="acts"><button class="btn solid" type="button" data-svs="show">Show me</button></div>`
+    : `<span class="kicker" style="color:#c3d3da">The shield vote</span>
+       <h3 id="svShieldTitle">${p.voteShield.dagger ? "You have a shield and the Dagger" : "You have the shield"}</h3>
+       <p>The castle voted to protect you. You are safe from tonight's murder: if the Traitors chose you, you will survive this breakfast.</p>
+       ${p.voteShield.dagger ? `<p>You also hold <b>the Dagger</b>. In one banishment vote of your choice, your vote counts twice. It can't be used at the Fire Pit, and it expires after ${DAGGER_VOTES} banishment votes.</p>` : ""}
+       <p class="muted" style="font-size:.9rem">Nobody else has been told. The shield lasts only for this breakfast${p.voteShield.dagger ? "; the Dagger stays until you use it or it expires" : ""}.</p>
+       <div class="acts"><button class="btn solid" type="button" data-svs="close">Close</button></div>`;
+  if (first){
+    document.body.classList.remove("shake"); void document.body.offsetWidth; document.body.classList.add("shake");
+    try { navigator.vibrate && navigator.vibrate([120, 60, 180]); } catch(_){}
+    setTimeout(() => document.body.classList.remove("shake"), 900);
+  }
+}
+$("svShieldOverlay").addEventListener("click", e => {
+  const a = e.target.closest("[data-svs]")?.dataset.svs; if (!a) return;
+  if (a === "show"){ svShieldStage = 1; renderSvShieldOverlay(); }
+  else if (a === "close"){ const p = myPowerView(); if (p && p.voteShield) store.set(svShieldKey(p), "1"); renderSvShieldOverlay(); }
+});
+setInterval(renderSvShieldOverlay, 500);
 
 /* ----- traitor and recruit actions ----- */
 // Faithful a shortlister can still pick: not already on another Traitor's list.
@@ -3432,7 +3632,7 @@ function renderFire(force){
   const stage = $("fireStage");
   const host = isHostView(), player = isPlayerView(), screen = isScreenView();
   const f = fireState();
-  if (!fireOnStage() || murderActive() || (!host && !player && !screen)){ if (!stage.hidden){ stage.hidden = true; fireKey = ""; applyScreenLayout(); } return; }
+  if (!fireOnStage() || murderActive() || (!host && !player && !screen) || (screen && !host && chartOnScreen())){ if (!stage.hidden){ stage.hidden = true; fireKey = ""; applyScreenLayout(); } return; }
   const wasHidden = stage.hidden;
   stage.hidden = false;
   if (wasHidden) applyScreenLayout();
@@ -3557,7 +3757,7 @@ $("fireStage").addEventListener("click", e => {
   else if (a === "reveal-role") revealMyRole();
   else if (a === "awards") startAwards();
   else if (a === "awards-board") showAwardsBoard();
-  else if (a === "chart"){ chartOpen = !chartOpen; renderChart(); if (chartOpen) $("chartStage").scrollIntoView({ behavior: "smooth", block: "start" }); }
+  else if (a === "chart") setChartOpen(!chartOpen);
   else if (a === "force-reveal") forceFinaleReveal();
 });
 setInterval(() => { fireAutomation(); }, 300);
@@ -3686,7 +3886,7 @@ function renderChain(force){
     } else {
       html = `<span class="kicker">Safety Chain</span><h3>${c.remaining.length} players remain unsafe</h3>${safeList}
         <p style="margin:0">Unsafe: ${namesList(c.remaining)}</p>
-        ${chainPowersHtml(c)}
+        <p class="muted" style="margin:0">When you send it to the Traitors, everyone votes on which of the unsafe gets a secret shield and the Dagger. The winner is told as breakfast starts.</p>
         ${voting ? `<p class="muted" style="margin:0">The Traitors are voting. Follow along in the Turret panel.</p>`
           : `<div class="acts"><button class="btn solid danger" type="button" data-chain="to-traitors">Send to the Traitors</button><button class="link" type="button" data-chain="cancel">Cancel the Safety Chain</button></div>`}`;
     }
@@ -3741,7 +3941,7 @@ $("chainStage").addEventListener("click", e => {
   else if (a === "cancel") cancelChain();
 });
 
-/* ----- powers for the unsafe six: one shield and the Dagger, given secretly by the host ----- */
+/* ----- (old) host-given powers for the unsafe six. No longer shown: the shield vote decides it now. ----- */
 function chainPowersHtml(c){
   const P = powersMap();
   const chip = (id, on, attr) => `<button class="choice" type="button" ${attr}="${escapeHtml(id)}" aria-pressed="${on}">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}</span></button>`;
@@ -4262,10 +4462,12 @@ async function startAwards(){
 async function revealAward(i){
   const f = fireState(); if (!f || !f.awardMode) return;
   const revealedList = (f.awardsRevealed || []).includes(i) ? f.awardsRevealed : (f.awardsRevealed || []).concat([i]);
+  if (chartOpen || chartOnScreen()) await setChartOpen(false);
   try { await putFire({ ...f, awardShown: i, awardsRevealed: revealedList, awardsBoard: false }); } catch(_){ toast("That didn't save. Try again."); }
 }
 async function showAwardsBoard(){
   const f = fireState(); if (!f || !f.awardMode) return;
+  if (chartOpen || chartOnScreen()) await setChartOpen(false);
   try { await putFire({ ...f, awardsBoard: true, awardShown: null }); } catch(_){ toast("That didn't save. Try again."); }
 }
 async function awardsAutomation(f){ /* awards are revealed by the host */ }
@@ -4274,6 +4476,20 @@ function awardCard(a, big){
     <p class="muted" style="margin:0">${escapeHtml(a.desc)}</p>
     <div class="fire-row">${a.ids.map(id => firePortrait(id, "", "")).join("")}</div>
     <div class="award-line">${a.ids.map(id => escapeHtml(nameOf(id))).join(", ")} · ${escapeHtml(a.line)}</div></div>`;
+}
+// The last screen of the night: the game's winners big, every revealed award smaller beneath them.
+function finalBoardHtml(f, list, idxs){
+  const tw = f.winner === "traitors";
+  const winners = tw ? (f.traitorsLeft || []) : f.players.filter(id => f.allRoles[id] !== "traitor");
+  const awards = idxs.map(i => list[i]).map(a => `<div class="board-award"><b>${escapeHtml(a.title)}</b>
+      <div class="board-award-who">${a.ids.map(id => `<span class="board-award-person">${portraitThumb(id)}<span>${escapeHtml(nameOf(id))}</span></span>`).join("")}</div>
+      <span class="muted">${escapeHtml(a.line)}</span></div>`).join("");
+  return `<div class="final-board">
+    <div class="board-winners"><span class="kicker">The winners</span>
+      <h3 class="final-headline ${tw ? "final-traitor" : "final-faithful"}">${tw ? "The Traitors win" : "The Faithful win"}</h3>
+      <div class="fire-row winners board-winner-row">${winners.map(id => firePortrait(id, tw ? "TRAITOR" : "FAITHFUL", tw ? "traitor" : "")).join("")}</div></div>
+    ${awards ? `<div class="board-awards"><span class="kicker">Tonight's honours</span><div class="board-award-grid">${awards}</div></div>` : ""}
+  </div>`;
 }
 function awardsBoardHtml(list, idxs){
   return `<div class="award-grid">${idxs.map(i => list[i]).map(a => `<div class="award-mini"><b>${escapeHtml(a.title)}</b><span>${a.ids.map(id => escapeHtml(nameOf(id))).join(", ")}</span><span class="muted">${escapeHtml(a.line)}</span></div>`).join("")}</div>`;
@@ -4290,7 +4506,7 @@ function awardsHtml(f, view){
     return `<span class="kicker">The awards · ${done.length} of ${list.length} revealed</span><h3>Present the awards</h3>
       <p class="muted" style="margin:0">Only you can see this list. Reveal each award when you're ready.</p>
       <div class="award-list">${rows}</div>
-      <div class="acts"><button class="btn small" type="button" data-fire="awards-board" ${done.length ? "" : "disabled"}>Show all revealed awards</button><button class="btn small" type="button" data-fire="chart">Game chart</button></div>
+      <div class="acts"><button class="btn small" type="button" data-fire="awards-board" ${done.length ? "" : "disabled"}>Show the winners and awards</button><button class="btn small" type="button" data-fire="chart">Game chart</button></div>
       <p class="muted" style="margin:0">Use End game in your host bar to return to the lobby.</p>`;
   }
   if (view === "phone"){
@@ -4298,7 +4514,7 @@ function awardsHtml(f, view){
     return `<span class="kicker">The awards</span><h3>Awards are being presented</h3>
       <p class="muted" style="margin:0">Watch the community screen.</p>${mine.length ? `<div class="verdict role-faithful">You won: ${mine.map(a => escapeHtml(a.title)).join(", ")}</div>` : ""}`;
   }
-  if (f.awardsBoard) return `<span class="kicker">The awards</span><h3>Tonight's honours</h3>${awardsBoardHtml(list, done)}`;
+  if (f.awardsBoard) return finalBoardHtml(f, list, done);
   if (f.awardShown == null) return `<span class="kicker">The awards</span><h3 class="final-headline">And now, the awards</h3><p class="stage-lede">${list.length} honours to hand out tonight.</p>`;
   return `<span class="kicker">The awards · ${done.length} of ${list.length}</span>${awardCard(list[f.awardShown], true)}`;
 }
@@ -4395,8 +4611,8 @@ function chartModel(){
   });
   return { ncols: cols.length, rows };
 }
-function chartHtml(){
-  const m = chartModel();
+function chartHtml(model){
+  const m = model || chartModel();
   if (!m) return `<p class="muted" style="margin:0">Nothing has happened yet, so there's no chart to show.</p>`;
   const cellHtml = (c, tag) => `<${tag}${c.span > 1 ? ` colspan="${c.span}"` : ""}${c.cls && c.cls !== "head" ? ` class="ch-${c.cls}"` : ""}>${escapeHtml(c.text)}${(c.sub || []).map(x => `<small>${escapeHtml(x)}</small>`).join("")}</${tag}>`;
   let h = `<div class="chart-wrap"><table class="game-chart"><thead>`;
@@ -4481,16 +4697,57 @@ async function downloadChart(){
   setTimeout(() => URL.revokeObjectURL(url), 4000);
   toast("Chart image saved");
 }
+// When the host opens the chart it's also published to game/chart, so the community screen shows it too.
+let liveChartShow = null, chartScreenKey = "";
+const chartShowState = () => isTrial() ? (trialGame.chartShow || null) : liveChartShow;
+const chartFinale = () => { const f = fireState(); return !!(f && f.phase === "finale" && f.winner); };
+const chartOnScreen = () => { const c = chartShowState(); return !!(c && c.open && c.game === (gameState().startedAt || 0) && chartFinale()); };
+// On the community screen, shrink the table until the whole chart fits without scrolling.
+function fitChartToScreen(st){
+  const table = st.querySelector(".game-chart"); if (!table || st.hidden) return;
+  let size = 1.1;
+  table.style.fontSize = size + "rem";
+  const wrap = st.querySelector(".chart-wrap") || table;
+  const over = () => st.scrollHeight > st.clientHeight + 1 || st.scrollWidth > st.clientWidth + 1 || wrap.scrollHeight > wrap.clientHeight + 1 || wrap.scrollWidth > wrap.clientWidth + 1;
+  while (size > 0.5 && over()){
+    size = Math.round((size - 0.05) * 100) / 100; table.style.fontSize = size + "rem";
+  }
+}
+window.addEventListener("resize", () => { const st = $("chartStage"); if (isScreenView() && !st.hidden) fitChartToScreen(st); });
+async function publishChart(open){
+  const data = { open: !!open, game: gameState().startedAt || 0, at: Date.now(), model: open ? JSON.stringify(chartModel() || null) : null };
+  if (isTrial()){ trialGame.chartShow = data; saveTrial(); renderWall(); return; }
+  liveChartShow = data;
+  try { await db.doc("game/chart").set(data); } catch(_){ toast("The chart couldn't be shown on the screen. Try again."); }
+}
+async function setChartOpen(open){
+  chartOpen = !!open; renderChart();
+  if (chartOpen) $("chartStage").scrollIntoView({ behavior: "smooth", block: "start" });
+  await publishChart(chartOpen);
+}
 function renderChart(){
   const st = $("chartStage");
-  const f = fireState();
-  const show = chartOpen && isHostView() && !!(f && f.phase === "finale" && f.winner);
+  if (isScreenView() && !isHostView()){
+    const show = chartOnScreen();
+    if (!show){ if (!st.hidden){ st.hidden = true; chartScreenKey = ""; applyScreenLayout(); } return; }
+    const c = chartShowState(), key = c.at + "";
+    const was = st.hidden; st.hidden = false;
+    if (key !== chartScreenKey){
+      chartScreenKey = key;
+      let model = null; try { model = JSON.parse(c.model || "null"); } catch(_){}
+      st.innerHTML = `<div class="chart-head"><div><span class="kicker">After the game</span><h3>The game chart</h3></div></div>${chartHtml(model)}`;
+    }
+    if (was) applyScreenLayout();
+    requestAnimationFrame(() => fitChartToScreen(st));
+    return;
+  }
+  const show = chartOpen && isHostView() && chartFinale();
   st.hidden = !show;
   if (!show) return;
   st.innerHTML = `<div class="chart-head"><div><span class="kicker">After the game</span><h3>The game chart</h3></div><div class="acts" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small solid" type="button" data-chart="download">Download as image</button><button class="btn small" type="button" data-chart="close">Close chart</button></div></div>${chartHtml()}`;
 }
 $("chartStage").addEventListener("click", e => {
-  if (e.target.closest("[data-chart='close']")){ chartOpen = false; renderChart(); }
+  if (e.target.closest("[data-chart='close']")) setChartOpen(false);
   else if (e.target.closest("[data-chart='download']")) downloadChart().catch(() => toast("The image couldn't be made. Try again."));
 });
 
